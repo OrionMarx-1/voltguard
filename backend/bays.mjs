@@ -9,7 +9,7 @@ export const BAY_POLICY = Object.freeze({ noDataAfterMs: 5000, historyFrames: 60
 
 // Simulation is assigned by this in-process channel, never by a frame's own claim.
 // Frames stay in memory; alerts persist separately through onAlert.
-export function createBayMonitor({ now = Date.now, onAlert = () => {}, onDecision = () => {} } = {}) {
+export function createBayMonitor({ now = Date.now, onAlert = () => {}, onDecision = () => {}, getAI = () => null } = {}) {
   let sessionId = null;
   let activeScenario = null;
   const states = new Map();
@@ -95,7 +95,7 @@ export function createBayMonitor({ now = Date.now, onAlert = () => {}, onDecisio
   function decide(alertId, input) {
     const state = [...states.values()].find(item => item.alert?.id === alertId);
     if (!state) throw new DecisionError('ALERT_NOT_ACTIVE');
-    const choice = normalizeDecision(input, state.alert), latest = state.frames.at(-1);
+    const choice = normalizeDecision(input, state.alert, getAI(state.alert)), latest = state.frames.at(-1);
     const at = now(), next = { ...state.alert, updatedAt: new Date(at).toISOString() };
     if (choice.level === 'escalate') { next.level = 'danger'; next.escalationSource = state.alert.level === 'danger' ? state.alert.escalationSource : 'operator'; next.status = 'processing'; }
     else if (choice.level) next.status = choice.level === 'downgrade' ? 'downgraded' : 'processing';

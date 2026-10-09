@@ -236,6 +236,9 @@ function render() {
   tab.textContent = c().tab;
   if (view.hidden) return;
   view.querySelectorAll('[data-cp]').forEach(element => setText(element, c()[element.dataset.cp]));
+  $('cpAiToggle').disabled = !connected || busy || !snapshot?.session.aiConfigured;
+  const aiNote = snapshot?.session.aiMode === 'test_stub' ? (bridge.language === 'zh' ? '測試替身 · 預設輸出 · 非真實模型；只影響下一場演示。' : 'TEST STUB · Preset output · Not a real model; applies to the next scenario.') : snapshot?.session.aiConfigured ? (bridge.language === 'zh' ? '只影響下一場演示；AI 不會自動處置告警。' : 'Applies to the next scenario; AI does not act on alerts automatically.') : c().aiNote;
+  setText(view.querySelector('[data-cp="aiNote"]'), aiNote);
   const bays = currentBays(), counts = countBayStates(bays);
   $('cpConnection').dataset.connected = String(connected);
   setText($('cpConnection'), service === 'loading' ? c().loading : service === 'static' ? c().serviceRequired : connected ? c().live : c().offline);
@@ -277,7 +280,7 @@ function render() {
   const detail = detailLoader.state.detail;
   const matches = detail?.bay.id === selected && detail?.session.id === snapshot?.session.id;
   decisionPanel.render({ sessionId: snapshot?.session.id ?? '', bayId: selected, config, alert: alerts.find(item => item.id === bay.alertId) ?? null,
-    decisions: matches ? detail.decisions : [], connected, busy, detailReady: Boolean(matches && detail.frame && !detailLoader.state.loading && !detailLoader.state.error) });
+    decisions: matches ? detail.decisions : [], ai: matches ? detail.ai : null, aiRuns: matches ? detail.aiRuns : [], connected, busy, detailReady: Boolean(matches && detail.frame && !detailLoader.state.loading && !detailLoader.state.error) });
   for (const id of ['cpScenarioA', 'cpScenarioB', 'cpReset']) $(id).disabled = busy || !connected;
   $('cpScenarioA').setAttribute('aria-pressed', String(snapshot?.session.scenario === 'A'));
   $('cpScenarioB').setAttribute('aria-pressed', String(snapshot?.session.scenario === 'B'));
@@ -313,6 +316,7 @@ async function request(route, input, signal) {
 }
 function applySnapshot(next) {
   if (retiredSessions.has(next.session.id)) return false;
+  if (snapshot?.session.id !== next.session.id) $('cpAiToggle').checked = next.session.aiEnabled;
   if (snapshot && snapshot.session.id !== next.session.id) {
     retiredSessions.add(snapshot.session.id);
     if (retiredSessions.size > 32) retiredSessions.delete(retiredSessions.values().next().value);
@@ -353,7 +357,7 @@ function connect() {
     } else if (message.type === 'alert') {
       refreshAlerts();
       if (message.report?.alert?.sessionId === snapshot?.session.id && message.report.alert.bayId === selected) { detailRevision++; syncDetail(); }
-    } else if (message.type === 'decision' && message.report?.sessionId === snapshot?.session.id && message.report.bayId === selected) { detailRevision++; syncDetail(); }
+    } else if (['decision', 'ai'].includes(message.type) && message.report?.sessionId === snapshot?.session.id && message.report.bayId === selected) { detailRevision++; syncDetail(); }
   });
   channel.addEventListener('error', () => channel.close());
   channel.addEventListener('close', () => {
@@ -376,6 +380,7 @@ $('cpReconnect').addEventListener('click', load);
 $('cpDetailRetry').addEventListener('click', () => detailLoader.retry());
 const freshnessTimer = setInterval(() => {
   if (service === 'local' && connected && Date.now() - lastUpdateAt > 5000) { connected = false; service = 'offline'; render(); }
+  else if (!view.hidden) render();
 }, 1000);
 window.addEventListener('pagehide', () => { stopped = true; detailLoader.close(); clearInterval(freshnessTimer); clearTimeout(reconnectTimer); socket?.close(); });
 const requested = () => new URLSearchParams(location.search).get('view') === 'carpark';

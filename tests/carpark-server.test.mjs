@@ -34,7 +34,7 @@ test('carpark APIs expose twelve bays, one permanently missing feed, compact sum
     const detail = await f.get('/api/bays/B2-02');
     assert.equal(detail.frame.temperaturesC.length, 24); assert.equal(detail.frame.temperaturesC[0].length, 32);
     assert.equal(detail.history.length, 2); assert.equal(detail.frame.sourceType, 'simulation');
-    assert.equal(detail.ai.errorCode, 'BAY_AI_NOT_IMPLEMENTED');
+    assert.equal(detail.ai.errorCode, 'AI_NOT_CONFIGURED');
     assert.equal(detail.session.aiEnabled, false); assert.equal(detail.session.aiConfigured, false);
     assert.equal((await f.get('/api/alerts')).alerts.length, 0);
     assert.equal((await fetch(f.base + '/api/bays/B2-13')).status, 404);
