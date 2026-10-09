@@ -16,8 +16,12 @@ export function createAIProvider({ apiKey = process.env.VOLTGUARD_AI_API_KEY ?? 
     const timer = setTimeout(() => { controller.abort(); rejectDeadline(new BayAIError('AI_TIMEOUT')); }, timeoutMs);
     try {
       return await Promise.race([deadline, (async () => {
-        const messages = [{ role: 'system', content: system }, { role: 'user', content: [{ type: 'text', text }, { type: 'image_url', image_url: { url: imagePng, detail: 'low' } }] }];
+        // The schema must survive a json_object fallback, where the API no
+        // longer receives it through response_format.
+        const messages = [{ role: 'system', content: `${system}\nRequired output JSON schema:\n${JSON.stringify(schema)}` }, { role: 'user', content: [...(text ? [{ type: 'text', text }] : []), { type: 'image_url', image_url: { url: imagePng, detail: 'low' } }] }];
+        let requests = 0;
         for (const type of ['json_schema', 'json_object']) {
+          requests++;
           const response = await fetchImpl(endpoint, { method: 'POST', redirect: 'error', signal: controller.signal, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
             body: JSON.stringify({ model, store: false, messages, response_format: type === 'json_schema' ? { type, json_schema: { name: 'voltguard_bay_explanation', strict: true, schema } } : { type } }) });
           const data = await response.json().catch(() => { throw new BayAIError('AI_JSON'); });
@@ -31,7 +35,7 @@ export function createAIProvider({ apiKey = process.env.VOLTGUARD_AI_API_KEY ?? 
           if (choice?.message?.refusal) throw new BayAIError('AI_REFUSAL');
           if (choice?.finish_reason !== 'stop') throw new BayAIError('AI_INCOMPLETE');
           let json; try { json = JSON.parse(choice.message.content); } catch { throw new BayAIError('AI_JSON'); }
-          return { json, latencyMs: Math.max(0, clock() - started), model };
+          return { json, latencyMs: Math.max(0, clock() - started), model, responseFormat: type, requests };
         }
       })()]);
     } catch (error) { throw error instanceof BayAIError ? error : new BayAIError('AI_UNAVAILABLE'); }

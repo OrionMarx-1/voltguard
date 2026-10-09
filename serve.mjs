@@ -1,4 +1,6 @@
 import { createVoltGuardServer } from './backend/server.mjs';
+import { loadLocalEnv } from './backend/local-env.mjs';
+loadLocalEnv();
 const port = Number(process.env.VOLTGUARD_PORT || 4173);
 if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Invalid VOLTGUARD_PORT');
 const app = await createVoltGuardServer();

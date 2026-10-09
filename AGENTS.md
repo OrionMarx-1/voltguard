@@ -33,6 +33,8 @@ $git  = "C:\Users\Admin1\AppData\Local\GitHubDesktop\app-3.6.6\resources\app\git
 3. **提交**：每个独立改动一个 commit，测试未全部通过不得提交；提交前用 `& $git status --short` 确认不含 `.env`、密钥或 `.sites-runtime/`。不改写历史（`--amend`、`reset --hard`、强推），除非用户明确要求。
 4. **交付**：向用户写明新增／更新的测试、实际运行的测试与 QA 结果、commit 哈希；有失败须如实说明，不得声称通过。
 
+真实车位模型评估：`scripts/live-bay-ai-check.mjs`（默认 30 次；`--repeats=1` 为 10 次）与 `scripts/live-bay-ui-check.mjs`（3 次）会读取私有 `.env` 并调用真实接口。仅在用户已授权真实服务商验证时运行；普通测试和 `qa-*` 不读取私有 `.env`、不调用真实模型。评估的校验／场景预期达成率须如实记录，不能与程序测试通过率混淆。
+
 ## 项目边界
 
 - 运行：`& $node serve.mjs`，打开 http://127.0.0.1:4173 。
