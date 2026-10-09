@@ -1,0 +1,24 @@
+{
+  "schemaVersion": "voltguard-carpark-1",
+  "floor": "B2",
+  "frame": { "rows": 24, "cols": 32 },
+  "zones": [
+    { "id": "end", "rects": [{ "rows": [4, 13], "cols": [3, 28] }, { "rows": [14, 18], "cols": [9, 22] }] },
+    { "id": "wheel", "rects": [{ "rows": [14, 23], "cols": [3, 8] }, { "rows": [14, 23], "cols": [23, 28] }] },
+    { "id": "underbody", "rects": [{ "rows": [19, 23], "cols": [9, 22] }] }
+  ],
+  "bays": [
+    { "id": "B2-01", "row": 0, "col": 0, "charging": true, "endFacingCamera": "front" },
+    { "id": "B2-02", "row": 0, "col": 1, "charging": true, "endFacingCamera": "front" },
+    { "id": "B2-03", "row": 0, "col": 2, "charging": true, "endFacingCamera": "front" },
+    { "id": "B2-04", "row": 0, "col": 3, "charging": true, "endFacingCamera": "front" },
+    { "id": "B2-05", "row": 0, "col": 4, "charging": true, "endFacingCamera": "front" },
+    { "id": "B2-06", "row": 0, "col": 5, "charging": true, "endFacingCamera": "front" },
+    { "id": "B2-07", "row": 1, "col": 0, "charging": false, "endFacingCamera": "front" },
+    { "id": "B2-08", "row": 1, "col": 1, "charging": false, "endFacingCamera": "front" },
+    { "id": "B2-09", "row": 1, "col": 2, "charging": false, "endFacingCamera": "front" },
+    { "id": "B2-10", "row": 1, "col": 3, "charging": false, "endFacingCamera": "front" },
+    { "id": "B2-11", "row": 1, "col": 4, "charging": false, "endFacingCamera": "front" },
+    { "id": "B2-12", "row": 1, "col": 5, "charging": false, "endFacingCamera": "front" }
+  ]
+}
