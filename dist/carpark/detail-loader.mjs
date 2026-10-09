@@ -1,33 +1,34 @@
 // Only the selected bay is read. Coalesce ticks while a request is in flight;
 // selection/session changes abort it and invalidate even an uncancellable reply.
 export function createBayDetailLoader({ fetchDetail, onChange }) {
-  let target = null, job = null, attempted = undefined, generation = 0;
+  let target = null, job = null, attempted = undefined, generation = 0, loadedRevision = null, retryQueued = false;
   let state = { detail: null, loading: false, error: false };
   const publish = patch => { state = { ...state, ...patch }; onChange(state); };
   const seq = detail => detail?.frame?.seq ?? null;
-  const caughtUp = () => state.detail && (target.seq === null ? seq(state.detail) === null : seq(state.detail) >= target.seq);
+  const key = () => JSON.stringify([target.seq, target.revision ?? '']);
+  const caughtUp = () => state.detail && loadedRevision === (target.revision ?? '') && (target.seq === null ? seq(state.detail) === null : seq(state.detail) >= target.seq);
   function pump(force = false) {
-    if (!target || job || (!force && (caughtUp() || attempted === target.seq))) return;
+    if (!target || job || (!force && (caughtUp() || attempted === key()))) return;
     const wanted = { ...target }, version = generation, controller = new AbortController();
-    const current = { controller }; job = current; attempted = wanted.seq;
+    const current = { controller }; job = current; attempted = key();
     publish({ loading: true, error: false });
     Promise.resolve().then(() => fetchDetail(wanted.bayId, controller.signal)).then(detail => {
       if (version !== generation) return;
       if (detail?.session?.id !== wanted.sessionId || detail?.bay?.id !== wanted.bayId || detail.sourceType !== 'simulation' || detail.exportable !== false ||
           (detail.frame && (detail.frame.bayId !== wanted.bayId || detail.frame.sourceType !== 'simulation' || !Number.isSafeInteger(detail.frame.seq))) ||
           (wanted.seq !== null && (seq(detail) === null || seq(detail) < wanted.seq))) throw Error('BAY_DETAIL_MISMATCH');
-      publish({ detail, error: false });
+      loadedRevision = wanted.revision ?? ''; publish({ detail, error: false });
     }).catch(() => { if (version === generation) publish({ error: true }); }).finally(() => {
       if (job !== current) return;
-      job = null; publish({ loading: false }); pump();
+      job = null; publish({ loading: false }); const again = retryQueued; retryQueued = false; pump(again);
     });
   }
   function update(next) {
     if (!next || next.bayId !== target?.bayId || next.sessionId !== target?.sessionId) {
-      generation++; job?.controller.abort(); job = null; attempted = undefined;
+      generation++; job?.controller.abort(); job = null; attempted = undefined; loadedRevision = null; retryQueued = false;
       target = next; publish({ detail: null, loading: false, error: false });
     } else target = next;
     pump();
   }
-  return { update, retry: () => pump(true), get state() { return state; }, close: () => update(null) };
+  return { update, retry: () => { if (job) retryQueued = true; else pump(true); }, get state() { return state; }, close: () => update(null) };
 }

@@ -9,6 +9,7 @@ import {buildNasaReport,decodeMeasuredImport} from '../dist/evidence.mjs';
 import {createCopilot,CopilotError} from './copilot.mjs';
 import {retrieveGuidance} from './rag.mjs';
 import { createDemoCarpark } from './carpark.mjs';
+import { DecisionError } from './bay-decisions.mjs';
 
 const project = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const root = path.join(project, 'dist');
@@ -118,6 +119,8 @@ export async function createVoltGuardServer({ databasePath = path.join(project, 
         return json(res, 201, store(createReport(record, assessment, 'authorized_gateway_unverified_measurements')));
       }
       if (req.method !== 'GET' && req.method !== 'HEAD' && req.headers['x-voltguard-csrf'] !== csrf) return json(res, 403, { error: 'CSRF' });
+      const decisionMatch = /^\/api\/alerts\/([0-9a-f-]{36})\/decisions$/.exec(route);
+      if (decisionMatch && req.method === 'POST') return json(res, 201, carpark.decide(decisionMatch[1], await body(req)));
       if (route === '/api/demo/scenario' && req.method === 'POST') return json(res, 200, carpark.play(await body(req)));
       if (route === '/api/demo/reset' && req.method === 'POST') {
         const input = await body(req);
@@ -193,7 +196,8 @@ export async function createVoltGuardServer({ databasePath = path.join(project, 
       res.writeHead(200, { 'Content-Type': mime[path.extname(filename)] || 'application/octet-stream', 'Cache-Control': 'no-cache', 'X-Content-Type-Options': 'nosniff' });
       res.end(req.method === 'HEAD' ? undefined : data);
     } catch (error) {
-      if (error instanceof CopilotError) json(res,error.status,{error:error.code});
+      if (error instanceof DecisionError) json(res, 409, { error: error.code });
+      else if (error instanceof CopilotError) json(res,error.status,{error:error.code});
       else if (error instanceof ValidationError) json(res, 422, { error: error.code });
       else if (error.code === 'ENOENT') json(res, 404, { error: 'NOT_FOUND' });
       else { console.error('VoltGuard request failed:', error.name); json(res, 500, { error: 'INTERNAL' }); }

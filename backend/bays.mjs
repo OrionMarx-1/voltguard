@@ -2,12 +2,14 @@ import { randomUUID } from 'node:crypto';
 import { CARPARK_LAYOUT, hotspotRegion } from '../dist/carpark/layout.mjs';
 import { normalizeTelemetry, assessTelemetry, ValidationError } from '../dist/safety.mjs';
 import { DEMO_BAYS, SCENARIOS } from './sim/scenarios.mjs';
+import { normalizeDecision, DecisionError } from './bay-decisions.mjs';
+import { POLICY } from '../dist/safety.mjs';
 
-export const BAY_POLICY = Object.freeze({ noDataAfterMs: 5000, historyFrames: 60 });
+export const BAY_POLICY = Object.freeze({ noDataAfterMs: 5000, historyFrames: 60, normalForMs: 10000, reopenDeltaC: 3 });
 
 // Simulation is assigned by this in-process channel, never by a frame's own claim.
 // Frames stay in memory; alerts persist separately through onAlert.
-export function createBayMonitor({ now = Date.now, onAlert = () => {} } = {}) {
+export function createBayMonitor({ now = Date.now, onAlert = () => {}, onDecision = () => {} } = {}) {
   let sessionId = null;
   let activeScenario = null;
   const states = new Map();
@@ -16,7 +18,7 @@ export function createBayMonitor({ now = Date.now, onAlert = () => {} } = {}) {
     sessionId = id;
     activeScenario = scenario;
     states.clear();
-    for (const bay of CARPARK_LAYOUT.bays) states.set(bay.id, { bay, frames: [], alert: null });
+    for (const bay of CARPARK_LAYOUT.bays) states.set(bay.id, { bay, frames: [], alert: null, normalSince: null, downgradePeak: null });
   }
   reset(null);
   const stateFor = id => {
@@ -49,8 +51,22 @@ export function createBayMonitor({ now = Date.now, onAlert = () => {} } = {}) {
     } else if (state.alert?.level === 'warning' && assessment.thermal === 'danger') {
       state.alert.level = 'danger';
       state.alert.escalationSource = 'rule';
+      state.alert.status = 'pending';
+      state.normalSince = null;
       state.alert.updatedAt = at;
       onAlert('escalated', structuredClone(state.alert));
+    } else if (state.alert?.status === 'downgraded' && (assessment.peakC >= state.downgradePeak + BAY_POLICY.reopenDeltaC || assessment.riseCPerS >= POLICY.warningRiseCPerS)) {
+      state.alert.status = 'pending'; state.alert.updatedAt = at; state.normalSince = null;
+      onAlert('reopened', structuredClone(state.alert));
+    }
+    if (state.alert && state.alert.status !== 'pending') {
+      const uninterrupted = previous && receivedAt - previous.receivedAt <= BAY_POLICY.noDataAfterMs && Date.parse(frame.capturedAt) - Date.parse(previous.frame.capturedAt) <= BAY_POLICY.noDataAfterMs && previous.assessment.thermal === 'normal';
+      if (assessment.thermal !== 'normal') state.normalSince = null;
+      else if (state.normalSince === null || !uninterrupted) state.normalSince = receivedAt;
+      if (state.normalSince !== null && receivedAt - state.normalSince >= BAY_POLICY.normalForMs) {
+        const closed = { ...state.alert, status: 'closed', updatedAt: at, closedAt: at };
+        onAlert('closed', closed); state.alert = null; state.normalSince = null; state.downgradePeak = null;
+      }
     }
     return summary(state, receivedAt);
   }
@@ -66,7 +82,7 @@ export function createBayMonitor({ now = Date.now, onAlert = () => {} } = {}) {
       connecting: Boolean(latest && !disconnected && insufficient && latest.assessment.riseCPerS === null),
       peakC: latest?.assessment.peakC ?? null, riseCPerS: latest?.assessment.riseCPerS ?? null,
       isCharging: demo.isCharging, occupied: demo.occupied || SCENARIOS[activeScenario]?.bayId === state.bay.id,
-      alertId: state.alert?.id ?? null, frameSeq: latest?.frame.seq ?? null
+      alertId: state.alert?.id ?? null, alertStatus: state.alert?.status ?? null, frameSeq: latest?.frame.seq ?? null
     };
   }
   const summaries = () => [...states.values()].map(state => summary(state));
@@ -74,7 +90,25 @@ export function createBayMonitor({ now = Date.now, onAlert = () => {} } = {}) {
     return [...states.values()].filter(state => state.alert).map(state => ({
       ...state.alert, noData: summary(state).noData,
       recovered: !summary(state).noData && state.frames.at(-1)?.assessment.thermal === 'normal'
-    })).sort((a, b) => (a.level === 'danger' ? 0 : 1) - (b.level === 'danger' ? 0 : 1) || a.createdAt.localeCompare(b.createdAt) || a.bayId.localeCompare(b.bayId));
+    })).sort((a, b) => (a.status === 'pending' ? 0 : 1) - (b.status === 'pending' ? 0 : 1) || (a.level === 'danger' ? 0 : 1) - (b.level === 'danger' ? 0 : 1) || a.createdAt.localeCompare(b.createdAt) || a.bayId.localeCompare(b.bayId));
+  }
+  function decide(alertId, input) {
+    const state = [...states.values()].find(item => item.alert?.id === alertId);
+    if (!state) throw new DecisionError('ALERT_NOT_ACTIVE');
+    const choice = normalizeDecision(input, state.alert), latest = state.frames.at(-1);
+    const at = now(), next = { ...state.alert, updatedAt: new Date(at).toISOString() };
+    if (choice.level === 'escalate') { next.level = 'danger'; next.escalationSource = state.alert.level === 'danger' ? state.alert.escalationSource : 'operator'; next.status = 'processing'; }
+    else if (choice.level) next.status = choice.level === 'downgrade' ? 'downgraded' : 'processing';
+    const decision = { id: randomUUID(), ...choice, alertId, bayId: state.bay.id, at: next.updatedAt,
+      levelBefore: state.alert.level, levelAfter: next.level, frameSeq: latest.frame.seq, frame: structuredClone(latest.frame), sessionId, sourceType: 'simulation', exportable: false };
+    // Persist before publishing or changing memory, so failed writes are reversible.
+    onDecision(structuredClone(decision), structuredClone(next));
+    state.alert = next;
+    if (choice.level) {
+      state.downgradePeak = choice.level === 'downgrade' ? latest.assessment.peakC : null;
+      state.normalSince = !summary(state, at).noData && latest.assessment.thermal === 'normal' ? at : null;
+    }
+    return { decision, alert: structuredClone(next) };
   }
   function detail(id) {
     const state = stateFor(id), latest = state.frames.at(-1);
@@ -85,5 +119,5 @@ export function createBayMonitor({ now = Date.now, onAlert = () => {} } = {}) {
       alert: alerts().find(alert => alert.bayId === id) ?? null
     });
   }
-  return { reset, ingestSimulation, summaries, alerts, detail };
+  return { reset, ingestSimulation, summaries, alerts, detail, decide };
 }

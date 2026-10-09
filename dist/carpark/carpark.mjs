@@ -3,6 +3,7 @@ import { displayBay, countBayStates, bayInDirection, displayAlerts } from './sta
 import { zoneLabels } from './layout.mjs';
 import { createBayDetailLoader } from './detail-loader.mjs';
 import { drawBayFrame, trendGeometry } from './detail-render.mjs';
+import { createDecisionPanel } from './decision-panel.mjs';
 
 const bridge = window.voltguard, $ = id => document.getElementById(id);
 const words = {
@@ -15,7 +16,7 @@ const words = {
     retry: '重新連線', normal: '正常', warning: '警告', danger: '危險', no_data: '無資料', connecting: '正在接入',
     map: 'B2 車位平面圖', mapNote: '按狀態查看車位；顏色與文字同時標示', chargingRow: '充電車位', standardRow: '普通車位',
     aisle: '行車通道', charging: '充電中', charger: '充電位', parked: '有車 · 未充電', empty: '空位', unknown: '車輛狀態未知',
-    latest: '最高溫', lastReading: '最後讀值', blindSpots: '無資料車位', alerts: '目前告警', alertsNote: '規則告警持續保留，直到處理或重置演示。',
+    latest: '最高溫', lastReading: '最後讀值', blindSpots: '無資料車位', alerts: '目前告警', alertsNote: '已處理告警仍保留，待持續正常後結束；重置可清空。',
     noAlerts: '目前沒有規則告警', noAlertsNote: '系統持續監測；無資料不代表正常。', pending: '待處理', recovered: '溫度已恢復正常',
     selected: '車位詳情', selectHint: '點選車位，或用方向鍵移動。', chargingBay: '充電車位', standardBay: '普通車位',
     noFrame: '尚無可用溫度幀', missingNote: '未收到新資料；不能據此判定正常。', summaryNote: '此頁顯示規則狀態與最高溫。',
@@ -33,7 +34,7 @@ const words = {
     detailLoading: '正在讀取車位詳情…', detailFailed: '詳情讀取失敗；保留最後畫面。',
     detailBehind: '等待最新幀詳情；以下為最後畫面。', detailMissing: '未收到新資料；以下為最後畫面與規則。',
     detailRetry: '重試詳情', noRate: '缺少可比較幀，速率不可用。', unknownRule: '資料不足',
-    frame: '幀', ruleNote: '規則來自服務端；上方車位狀態保留未處理告警。'
+    frame: '幀', ruleNote: '規則來自服務端；上方車位狀態保留未結束告警。', processing: '處理中', downgraded: '已降級 · 觀察中'
   },
   en: {
     tab: 'Bay monitor', kicker: 'CONTROL ROOM · EARLY WARNING', title: 'Spot the change. Decide the next step.',
@@ -44,7 +45,7 @@ const words = {
     retry: 'Reconnect', normal: 'Normal', warning: 'Warning', danger: 'Danger', no_data: 'No data', connecting: 'Connecting',
     map: 'B2 parking layout', mapNote: 'Inspect each bay; status uses both colour and text', chargingRow: 'CHARGING BAYS', standardRow: 'STANDARD BAYS',
     aisle: 'DRIVE AISLE', charging: 'Charging', charger: 'Charging bay', parked: 'Parked · Not charging', empty: 'Empty bay', unknown: 'Occupancy unknown',
-    latest: 'Peak temperature', lastReading: 'Last reading', blindSpots: 'Bays without data', alerts: 'Current alerts', alertsNote: 'Rule alerts remain until handled or the demo is reset.',
+    latest: 'Peak temperature', lastReading: 'Last reading', blindSpots: 'Bays without data', alerts: 'Current alerts', alertsNote: 'Handled alerts remain until sustained normal evidence closes them or the demo is reset.',
     noAlerts: 'No current rule alerts', noAlertsNote: 'Monitoring continues. Missing data is not a normal result.', pending: 'Pending', recovered: 'Temperature returned to normal',
     selected: 'Bay details', selectHint: 'Select a bay, or move with the arrow keys.', chargingBay: 'Charging bay', standardBay: 'Standard bay',
     noFrame: 'No temperature frame available', missingNote: 'No new data. A normal result cannot be established.', summaryNote: 'This view shows rule status and peak temperature.',
@@ -62,7 +63,7 @@ const words = {
     detailLoading: 'Loading bay details…', detailFailed: 'Details could not be read; last image retained.',
     detailBehind: 'Waiting for latest details; last image shown below.', detailMissing: 'No new data; last image and rule shown below.',
     detailRetry: 'Retry details', noRate: 'No comparable frame; rise rate unavailable.', unknownRule: 'Insufficient data',
-    frame: 'Frame', ruleNote: 'Rules come from the service. The bay status above retains pending alerts.'
+    frame: 'Frame', ruleNote: 'Rules come from the service. The bay status above retains active alerts.', processing: 'In progress', downgraded: 'Downgraded · Observing'
   }
 };
 const c = () => words[bridge.language];
@@ -108,6 +109,8 @@ details.innerHTML = `<div id="cpDetailNotice" class="cp-detail-notice" role="sta
     <p class="cp-detail-small" data-cp="trendNote"></p>
   </div>`;
 $('cpSelectedOccupancy').after(details);
+const decisionHost = document.createElement('div'); decisionHost.className = 'cp-decision-panel'; details.after(decisionHost);
+const operatorHost = document.createElement('div'); operatorHost.className = 'cp-operator'; view.querySelector('.cp-demo-banner').after(operatorHost);
 const tab = document.createElement('button');
 tab.id = 'carparkTab'; tab.type = 'button'; tab.className = 'view-tab'; tab.setAttribute('aria-controls', 'carparkView');
 document.querySelector('.view-tabs').prepend(tab);
@@ -132,7 +135,14 @@ $('cpBayGrid').append(aisle);
 
 let snapshot = null, alerts = [], selected = 'B2-02', csrf = '', connected = false, service = 'loading', busy = false, error = '', started = false;
 let socket = null, reconnectTimer = null, lastUpdateAt = 0, loadId = 0, stopped = false, alertSignature = '';
+let detailRevision = 0, alertsLoadId = 0;
 const retiredSessions = new Set();
+const decisionPanel = createDecisionPanel({ host: decisionHost, operatorHost, language: () => bridge.language, request,
+  async onSaved(result) {
+    if (snapshot?.session.id !== result.session.id) return;
+    applySnapshot(await request('/api/carpark')); await refreshAlerts(); detailLoader.retry();
+  }
+});
 const detailLoader = createBayDetailLoader({
   fetchDetail: (id, signal) => request(`/api/bays/${encodeURIComponent(id)}`, undefined, signal),
   onChange: () => render()
@@ -144,7 +154,7 @@ function occupancy(bay) { return !snapshot || bay.noData ? c().unknown : bay.isC
 function syncDetail() {
   if (view.hidden || !connected || !snapshot) return;
   const bay = snapshot.bays.find(item => item.id === selected);
-  detailLoader.update({ bayId: selected, sessionId: snapshot.session.id, seq: bay?.frameSeq ?? null });
+  detailLoader.update({ bayId: selected, sessionId: snapshot.session.id, seq: bay?.frameSeq ?? null, revision: detailRevision });
 }
 function selectBay(id) { selected = id; detailLoader.close(); render(); syncDetail(); }
 function renderDetail(bay, config) {
@@ -205,15 +215,21 @@ function renderAlerts() {
     const note = document.createElement('p'); note.textContent = connected ? c().noAlertsNote : c().missingNote;
     empty.append(symbol, title, note); $('cpAlertList').append(empty);
   }
+  let group = '', groupHost;
   for (const alert of shown) {
-    const button = document.createElement('button'); button.type = 'button'; button.className = 'cp-alert-item'; button.dataset.level = alert.level;
+    const nextGroup = alert.status === 'pending' ? 'pending' : 'processing';
+    if (group !== nextGroup) {
+      group = nextGroup; groupHost = document.createElement('div'); groupHost.className = 'cp-alert-group'; groupHost.dataset.group = group;
+      const title = document.createElement('h3'); title.textContent = c()[group]; groupHost.append(title); $('cpAlertList').append(groupHost);
+    }
+    const button = document.createElement('button'); button.type = 'button'; button.className = 'cp-alert-item'; button.dataset.level = alert.level; button.dataset.alertStatus = alert.status;
     const head = document.createElement('span'); head.className = 'cp-alert-item-head';
     const id = document.createElement('strong'); id.textContent = alert.bayId;
     const label = document.createElement('span'); label.textContent = `${icons[alert.level] ?? '!'} ${c()[alert.level] ?? c().warning}`;
     head.append(id, label);
-    const note = document.createElement('small'); note.textContent = `${c().pending}${!connected || alert.noData ? ` · ${c().no_data}` : alert.recovered ? ` · ${c().recovered}` : ''}`;
+    const note = document.createElement('small'); note.textContent = `${c()[alert.status] ?? c().pending}${!connected || alert.noData ? ` · ${c().no_data}` : alert.recovered ? ` · ${c().recovered}` : ''}`;
     button.append(head, note); button.addEventListener('click', () => { selectBay(alert.bayId); bayElements.get(alert.bayId)?.focus(); });
-    $('cpAlertList').append(button);
+    groupHost.append(button);
   }
 }
 function render() {
@@ -239,11 +255,12 @@ function render() {
     const bay = bays[index], button = bayElements.get(config.id), label = bay.connecting ? c().connecting : c()[bay.status];
     button.dataset.status = bay.status; button.dataset.occupied = String(!bay.noData && Boolean(bay.occupied));
     button.dataset.frameSeq = String(bay.frameSeq ?? ''); button.dataset.noData = String(bay.noData);
+    button.dataset.alertStatus = bay.alertStatus ?? '';
     button.setAttribute('aria-pressed', String(selected === config.id)); button.tabIndex = selected === config.id ? 0 : -1;
     setText(button.querySelector('.cp-state-icon'), icons[bay.status]); setText(button.querySelector('.cp-state-text'), label);
     setText(button.querySelector('.cp-bay-temperature'), bay.peakC === null ? '—' : `${bay.peakC.toFixed(1)}°`);
     setText(button.querySelector('.cp-bay-occupancy'), occupancy(bay));
-    setText(button.querySelector('.cp-bay-missing'), bay.noData && ['warning', 'danger'].includes(bay.status) ? c().noDataBadge : '');
+    setText(button.querySelector('.cp-bay-missing'), bay.noData && ['warning', 'danger'].includes(bay.status) ? c().noDataBadge : bay.alertStatus === 'downgraded' ? c().downgraded : '');
     button.setAttribute('aria-label', `${config.id}, ${label}, ${bay.peakC === null ? c().noFrame : `${bay.peakC.toFixed(1)}°C`}, ${occupancy(bay)}${bay.noData ? `, ${c().no_data}` : ''}`);
   }
   const missingIds = CARPARK_LAYOUT.bays.filter((_, index) => bays[index].noData).map(bay => bay.id);
@@ -257,6 +274,10 @@ function render() {
   setText($('cpSelectedCaption'), bay.peakC === null ? c().noFrame : bay.noData ? c().lastReading : c().latest);
   setText($('cpSelectedOccupancy'), occupancy(bay)); setText($('cpSelectedNote'), bay.noData ? c().missingNote : c().summaryNote);
   renderDetail(bay, config);
+  const detail = detailLoader.state.detail;
+  const matches = detail?.bay.id === selected && detail?.session.id === snapshot?.session.id;
+  decisionPanel.render({ sessionId: snapshot?.session.id ?? '', bayId: selected, config, alert: alerts.find(item => item.id === bay.alertId) ?? null,
+    decisions: matches ? detail.decisions : [], connected, busy, detailReady: Boolean(matches && detail.frame && !detailLoader.state.loading && !detailLoader.state.error) });
   for (const id of ['cpScenarioA', 'cpScenarioB', 'cpReset']) $(id).disabled = busy || !connected;
   $('cpScenarioA').setAttribute('aria-pressed', String(snapshot?.session.scenario === 'A'));
   $('cpScenarioB').setAttribute('aria-pressed', String(snapshot?.session.scenario === 'B'));
@@ -266,6 +287,7 @@ function render() {
   const verified = document.querySelector('.verified'); verified.textContent = c().simulation; verified.classList.add('is-simulation');
 }
 function show() {
+  if (view.hidden) decisionPanel.resetViewing();
   bridge.showCarpark(); view.hidden = false; tab.classList.add('active'); tab.setAttribute('aria-current', 'page');
   document.body.classList.add('carpark-active'); render();
   if (!started) { started = true; load(); } else syncDetail();
@@ -275,6 +297,7 @@ window.addEventListener('voltguard-view', event => {
   if (event.detail.view === 'carpark') return;
   view.hidden = true; tab.classList.remove('active'); tab.setAttribute('aria-current', 'false');
   detailLoader.close();
+  decisionPanel.resetViewing();
   document.body.classList.remove('carpark-active'); document.querySelector('.verified').classList.remove('is-simulation');
 });
 window.addEventListener('voltguard-language', render);
@@ -284,7 +307,7 @@ async function request(route, input, signal) {
   try {
     const response = await fetch(route, { cache: 'no-store', signal: signal ? AbortSignal.any([controller.signal, signal]) : controller.signal,
       ...(input === undefined ? {} : { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Voltguard-Csrf': csrf }, body: JSON.stringify(input) }) });
-    if (!response.ok) { const failure = new Error(response.status === 403 ? 'CSRF' : 'REQUEST'); failure.status = response.status; throw failure; }
+    if (!response.ok) { const payload = await response.json().catch(() => ({})); const failure = new Error(response.status === 403 ? 'CSRF' : payload.error ?? 'REQUEST'); failure.status = response.status; throw failure; }
     return await response.json();
   } finally { clearTimeout(timer); }
 }
@@ -298,9 +321,10 @@ function applySnapshot(next) {
   snapshot = next; lastUpdateAt = Date.now(); connected = true; service = 'local'; render(); syncDetail(); return true;
 }
 async function refreshAlerts() {
+  const id = ++alertsLoadId;
   try {
     const result = await request('/api/alerts');
-    if (snapshot?.session.id !== result.session.id) return;
+    if (id !== alertsLoadId || snapshot?.session.id !== result.session.id) return;
     alerts = result.alerts; render();
   } catch { /* Keep known alerts when a read fails; no invented empty result. */ }
 }
@@ -326,7 +350,10 @@ function connect() {
     if (message.type === 'bays' && snapshot && message.report?.sourceType === 'simulation') {
       const changed = snapshot.session.id !== message.report.session.id;
       if (applySnapshot({ ...snapshot, session: message.report.session, bays: message.report.bays }) && changed) refreshAlerts();
-    } else if (message.type === 'alert') refreshAlerts();
+    } else if (message.type === 'alert') {
+      refreshAlerts();
+      if (message.report?.alert?.sessionId === snapshot?.session.id && message.report.alert.bayId === selected) { detailRevision++; syncDetail(); }
+    } else if (message.type === 'decision' && message.report?.sessionId === snapshot?.session.id && message.report.bayId === selected) { detailRevision++; syncDetail(); }
   });
   channel.addEventListener('error', () => channel.close());
   channel.addEventListener('close', () => {

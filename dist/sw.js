@@ -1,4 +1,4 @@
-const CACHE_NAME = 'voltguard-demo-v14';
+const CACHE_NAME = 'voltguard-demo-v15';
 const CORE_ASSETS = [
   './',
   './operations.css',
@@ -17,6 +17,7 @@ const CORE_ASSETS = [
   './carpark/state.mjs',
   './carpark/detail-loader.mjs',
   './carpark/detail-render.mjs',
+  './carpark/decision-panel.mjs',
   './data/carpark-b2.json',
   './thermal-ux.mjs',
   './thermal-simulation.mjs',

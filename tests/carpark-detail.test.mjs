@@ -5,8 +5,17 @@ import { drawBayFrame, trendGeometry } from '../dist/carpark/detail-render.mjs';
 import { frameAt } from '../backend/sim/scenarios.mjs';
 import { hotspotRegion } from '../dist/carpark/layout.mjs';
 import { temperatureColor } from '../dist/thermal-map.mjs';
+import { createViewingClock } from '../dist/carpark/decision-panel.mjs';
 
 const settle = () => new Promise(setImmediate);
+test('viewing duration follows opening a bay/session, survives frame updates, and restarts when returning from another page', () => {
+  let now = 10; const clock = createViewingClock(() => now);
+  clock.open('session/B2-02'); assert.equal(clock.elapsed(), 0);
+  now = 1010; clock.open('session/B2-02'); assert.equal(clock.elapsed(), 1000);
+  clock.open('session/B2-08'); now = 2010; assert.equal(clock.elapsed(), 1000);
+  clock.reset(); clock.open('session/B2-08'); now = 2110; assert.equal(clock.elapsed(), 100);
+  clock.open('new-session/B2-08'); assert.equal(clock.elapsed(), 0);
+});
 const target = (seq = 1, bayId = 'B2-02', sessionId = 'session-1') => ({ seq, bayId, sessionId });
 const detail = ({ seq, bayId, sessionId }) => ({ bay: { id: bayId }, session: { id: sessionId }, sourceType: 'simulation', exportable: false, frame: seq === null ? null : { seq, bayId, sourceType: 'simulation' } });
 function deferredLoader() {
@@ -23,6 +32,16 @@ test('detail reads coalesce ticks, accept a newer server frame, and stop rereadi
   calls[1].resolve(detail(target(4))); await settle();
   assert.equal(loader.state.detail.frame.seq, 4); assert.equal(loader.state.loading, false);
   loader.update(target(4)); await settle(); assert.equal(calls.length, 2);
+});
+
+test('decision revisions refresh details without a new temperature frame, and a retry during a read is queued', async () => {
+  const { loader, calls } = deferredLoader();
+  loader.update({ ...target(), revision: 0 }); await settle();
+  loader.update({ ...target(), revision: 1 }); calls[0].resolve(detail(target())); await settle();
+  assert.equal(calls.length, 2); loader.retry(); calls[1].resolve(detail(target())); await settle();
+  assert.equal(calls.length, 3); calls[2].resolve({ ...detail(target()), decisions: ['test-only record'] }); await settle();
+  assert.deepEqual(loader.state.detail.decisions, ['test-only record']);
+  loader.update({ ...target(), revision: 1 }); await settle(); assert.equal(calls.length, 3);
 });
 
 test('late replies cannot overwrite another selected bay or a new reset session, even if abort is ignored', async () => {
