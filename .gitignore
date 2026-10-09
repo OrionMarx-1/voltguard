@@ -1,0 +1,6 @@
+.sites-runtime/
+.git.incomplete-*/
+.chart-data-*/
+.env
+.env.*
+!.env.example

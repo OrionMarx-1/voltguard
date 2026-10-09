@@ -1,0 +1,51 @@
+import { createRequire } from 'node:module';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import {createVoltGuardServer} from '../backend/server.mjs';
+const app=await createVoltGuardServer({databasePath:':memory:'});
+await new Promise(resolve=>app.server.listen(0,'127.0.0.1',resolve));
+const base=`http://127.0.0.1:${app.server.address().port}`;
+const require=createRequire(import.meta.url);
+// Uses the installed Codex runtime; no package installation or browser download.
+const {chromium}=require('C:/Users/Admin1/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright');
+const browser=await chromium.launch({executablePath:'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',headless:true});
+const output=path.resolve('.sites-runtime/qa-v8');await fs.mkdir(output,{recursive:true});
+const context=await browser.newContext({viewport:{width:1440,height:1050}});
+const page=await context.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
+try{
+  await page.goto(base+'/?lang=en',{waitUntil:'networkidle'});
+  await page.locator('#thermalTemperature').filter({hasNotText:'—'}).waitFor();
+  await page.locator('#fleetTab').click();
+  await page.locator('#fleetRows .fleet-row').first().waitFor();
+  await page.locator('#operationsTab').click();
+  await page.locator('#opsNasa').click();
+  await page.locator('#opsRecordHeader').waitFor();
+  const text=await page.locator('body').innerText();
+  if(/[\u3400-\u9fff]/.test(text.replace('中文','')))throw new Error('Untranslated Chinese in English view: '+text.replace('中文','').match(/.{0,20}[\u3400-\u9fff].{0,20}/)?.[0]);
+  if(!await page.locator('#opsSave').isEnabled())throw new Error('Local service unavailable');
+  await page.locator('#opsSave').click();await page.locator('.ops-event').waitFor();
+  await page.locator('[data-action="acknowledge"]').click();await page.locator('[data-action="close"]').waitFor();
+  await page.locator('[data-action="close"]').click();await page.locator('.ops-event strong').filter({hasText:'Closed'}).waitFor();
+  const downloaded=page.waitForEvent('download');await page.locator('#opsJson').click();const download=await downloaded;await download.saveAs(path.join(output,'nasa-report.json'));
+  const exported=JSON.parse(await fs.readFile(path.join(output,'nasa-report.json'),'utf8'));
+  if(exported.provenance!=='bundled_nasa_record'||exported.assessment.maintenance!=='review')throw new Error('Incorrect report');
+  await page.evaluate(()=>scrollTo(0,0));await page.screenshot({path:path.join(output,'operations-en-desktop.png'),fullPage:true});
+  await page.evaluate(()=>window.print=()=>{});await page.locator('#opsPrint').click();await page.pdf({path:path.join(output,'nasa-report-en.pdf'),format:'A4',printBackground:true});
+  await page.locator('#langButton').click();await page.locator('#opsNasa').click();
+  await page.locator('#opsPrint').click();await page.pdf({path:path.join(output,'nasa-report-zh.pdf'),format:'A4',printBackground:true});
+  await page.setViewportSize({width:390,height:844});await page.evaluate(()=>scrollTo(0,0));await page.screenshot({path:path.join(output,'operations-zh-mobile.png'),fullPage:true});
+  if(await page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth))throw new Error('Mobile horizontal overflow');
+  // Genuine NASA points with explicit API-test timezone; historical, not a live-feed claim.
+  const nasa=JSON.parse(await fs.readFile('dist/data/cells/b0005/cycles/168.json','utf8'));
+  const records=nasa.samples.slice(0,2).map(p=>({assetId:'NASA-B0005-import',mode:'historical',source:'NASA measured points - contract test',timestamp:new Date(Date.UTC(2008,4,27,20,45)+p.t*1000).toISOString(),temperaturesC:[[p.c]]}));
+  await page.locator('#opsFile').setInputFiles({name:'measured.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify({records}))});
+  await page.locator('#thermalMode').filter({hasText:'匯入量測'}).waitFor();
+  await page.locator('#operationsTab').click();
+  await page.locator('#opsProvenance').filter({hasText:'尚未獨立核驗'}).waitFor();
+  await page.locator('#fleetTab').click();await page.locator('[data-cell="B0018"]').click();
+  await page.locator('#recordTitle').filter({hasText:'B0018'}).waitFor();
+  await page.locator('#langButton').click();
+  const detailText=await page.locator('body').innerText();if(/[\u3400-\u9fff]/.test(detailText.replace('中文','')))throw new Error('Untranslated detail text');
+  if(errors.length)throw new Error(errors.join('\n'));
+  console.log(JSON.stringify({ok:true,downloads:true,bilingual:true,mobileOverflow:false,printPdf:true,import:true,pageErrors:errors,output},null,2));
+}finally{await browser.close();await app.close();}
