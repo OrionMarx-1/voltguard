@@ -8,10 +8,11 @@ import { normalizeTelemetry, assessTelemetry, createReport, ValidationError } fr
 import {buildNasaReport,decodeMeasuredImport} from '../dist/evidence.mjs';
 import {createCopilot,CopilotError} from './copilot.mjs';
 import {retrieveGuidance} from './rag.mjs';
+import { createDemoCarpark } from './carpark.mjs';
 
 const project = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const root = path.join(project, 'dist');
-export async function createVoltGuardServer({ databasePath = path.join(project, '.sites-runtime', 'voltguard.sqlite'), ingestToken = process.env.VOLTGUARD_INGEST_TOKEN || '', copilotOptions={} } = {}) {
+export async function createVoltGuardServer({ databasePath = path.join(project, '.sites-runtime', 'voltguard.sqlite'), ingestToken = process.env.VOLTGUARD_INGEST_TOKEN || '', copilotOptions={}, carparkOptions={} } = {}) {
   const copilot=createCopilot(copilotOptions);
   if (databasePath !== ':memory:') await mkdir(path.dirname(databasePath), { recursive: true });
   const db = new DatabaseSync(databasePath);
@@ -34,6 +35,7 @@ export async function createVoltGuardServer({ databasePath = path.join(project, 
     else socket.destroy();
   }
   function broadcast(type, report = null) { for (const socket of clients) sendFrame(socket, { type, report }); }
+  const carpark = createDemoCarpark({ ...carparkOptions, db, broadcast });
   function store(report) {
     // Asset IDs must be hardware aliases, not VINs/plates. Hash aliases at the local persistence boundary.
     report.record.assetId = hash(report.record.assetId);
@@ -75,6 +77,13 @@ export async function createVoltGuardServer({ databasePath = path.join(project, 
       if (!trusted(req)) return json(res, 403, { error: 'ORIGIN' });
       const url = new URL(req.url, 'http://127.0.0.1'), route = url.pathname;
       if (route === '/api/health' && req.method === 'GET') return json(res, 200, { storage: 'sqlite', liveIngestConfigured: ingestToken.length >= 24, aiConfigured: copilot.configured, aiModel:'gpt-4o', aiScope:'local_opt_in', csrf });
+      if (route === '/api/carpark' && req.method === 'GET') return json(res, 200, carpark.snapshot());
+      const bayMatch = /^\/api\/bays\/(B2-\d{2})$/.exec(route);
+      if (bayMatch && req.method === 'GET') {
+        try { return json(res, 200, carpark.detail(bayMatch[1])); }
+        catch (error) { if (error.code === 'BAY_ID') return json(res, 404, { error: 'BAY_NOT_FOUND' }); throw error; }
+      }
+      if (route === '/api/alerts' && req.method === 'GET') return json(res, 200, carpark.alerts());
       if(route==='/api/copilot/rag'&&req.method==='GET'){
         try{return json(res,200,retrieveGuidance(url.searchParams.get('q')||'',url.searchParams.get('lang')));}catch{throw new ValidationError('QUERY');}
       }
@@ -109,6 +118,12 @@ export async function createVoltGuardServer({ databasePath = path.join(project, 
         return json(res, 201, store(createReport(record, assessment, 'authorized_gateway_unverified_measurements')));
       }
       if (req.method !== 'GET' && req.method !== 'HEAD' && req.headers['x-voltguard-csrf'] !== csrf) return json(res, 403, { error: 'CSRF' });
+      if (route === '/api/demo/scenario' && req.method === 'POST') return json(res, 200, carpark.play(await body(req)));
+      if (route === '/api/demo/reset' && req.method === 'POST') {
+        const input = await body(req);
+        if (!input || typeof input !== 'object' || Array.isArray(input) || Object.keys(input).length) throw new ValidationError('DEMO_CONTROL');
+        return json(res, 200, carpark.reset());
+      }
       if(route==='/api/copilot/diagnose'&&req.method==='POST'){
         const input=await body(req);if(input.consent!==true)throw new ValidationError('AI_CONSENT');
         if(!['en','zh'].includes(input.language))throw new ValidationError('LANGUAGE');
@@ -194,6 +209,6 @@ export async function createVoltGuardServer({ databasePath = path.join(project, 
     socket.on('error', () => clients.delete(socket)); socket.on('close', () => clients.delete(socket));
   });
   const heartbeat = setInterval(() => broadcast('heartbeat'), 10000); heartbeat.unref();
-  server.on('close', () => { clearInterval(heartbeat); db.close(); });
-  return { server, close: () => { for (const client of clients) client.destroy(); return new Promise(resolve => server.close(resolve)); } };
+  server.on('close', () => { clearInterval(heartbeat); carpark.close(); db.close(); });
+  return { server, carpark, close: () => { carpark.close(); for (const client of clients) client.destroy(); return new Promise(resolve => server.close(resolve)); } };
 }

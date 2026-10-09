@@ -1,0 +1,89 @@
+import { randomUUID } from 'node:crypto';
+import { CARPARK_LAYOUT, hotspotRegion } from '../dist/carpark/layout.mjs';
+import { normalizeTelemetry, assessTelemetry, ValidationError } from '../dist/safety.mjs';
+import { DEMO_BAYS, SCENARIOS } from './sim/scenarios.mjs';
+
+export const BAY_POLICY = Object.freeze({ noDataAfterMs: 5000, historyFrames: 60 });
+
+// Simulation is assigned by this in-process channel, never by a frame's own claim.
+// Frames stay in memory; alerts persist separately through onAlert.
+export function createBayMonitor({ now = Date.now, onAlert = () => {} } = {}) {
+  let sessionId = null;
+  let activeScenario = null;
+  const states = new Map();
+  function reset(id, { scenario = null } = {}) {
+    if (scenario !== null && !['A', 'B'].includes(scenario)) throw new ValidationError('SIMULATION_SCENARIO');
+    sessionId = id;
+    activeScenario = scenario;
+    states.clear();
+    for (const bay of CARPARK_LAYOUT.bays) states.set(bay.id, { bay, frames: [], alert: null });
+  }
+  reset(null);
+  const stateFor = id => {
+    const state = states.get(id);
+    if (!state) throw new ValidationError('BAY_ID');
+    return state;
+  };
+  function ingestSimulation(input) {
+    if (!sessionId) throw new ValidationError('DEMO_SESSION');
+    if (!input || typeof input !== 'object' || Array.isArray(input)) throw new ValidationError('FRAME_OBJECT');
+    if (input.schemaVersion !== 'voltguard-frame-1') throw new ValidationError('FRAME_SCHEMA');
+    const state = stateFor(input.bayId);
+    if (!Number.isSafeInteger(input.seq) || input.seq < 0) throw new ValidationError('FRAME_SEQUENCE');
+    const previous = state.frames.at(-1);
+    if (previous && input.seq <= previous.frame.seq) throw new ValidationError('FRAME_SEQUENCE');
+    const { rows, cols } = CARPARK_LAYOUT.frame;
+    if (!Array.isArray(input.temperaturesC) || input.temperaturesC.length !== rows || input.temperaturesC.some(row => !Array.isArray(row) || row.length !== cols)) {
+      throw new ValidationError('FRAME_MATRIX');
+    }
+    const record = normalizeTelemetry({ assetId: input.bayId, mode: 'live', source: 'VoltGuard carpark simulation', timestamp: input.capturedAt, temperaturesC: input.temperaturesC });
+    const receivedAt = now();
+    const assessment = assessTelemetry(record, previous?.record ?? null, { now: receivedAt });
+    const frame = { schemaVersion: 'voltguard-frame-1', bayId: input.bayId, seq: input.seq, capturedAt: record.timestamp, temperaturesC: record.temperaturesC, sourceType: 'simulation' };
+    state.frames.push({ frame, record, assessment, receivedAt, hotspot: hotspotRegion(record.temperaturesC, state.bay.endFacingCamera) });
+    if (state.frames.length > BAY_POLICY.historyFrames) state.frames.shift();
+    const at = new Date(receivedAt).toISOString();
+    if (!state.alert && ['warning', 'danger'].includes(assessment.thermal)) {
+      state.alert = { id: randomUUID(), sessionId, bayId: input.bayId, level: assessment.thermal, status: 'pending', escalationSource: 'rule', createdAt: at, updatedAt: at, sourceType: 'simulation' };
+      onAlert('created', structuredClone(state.alert));
+    } else if (state.alert?.level === 'warning' && assessment.thermal === 'danger') {
+      state.alert.level = 'danger';
+      state.alert.escalationSource = 'rule';
+      state.alert.updatedAt = at;
+      onAlert('escalated', structuredClone(state.alert));
+    }
+    return summary(state, receivedAt);
+  }
+  function summary(state, at = now()) {
+    const latest = state.frames.at(-1), demo = DEMO_BAYS.find(bay => bay.bayId === state.bay.id);
+    const disconnected = !latest || at - latest.receivedAt > BAY_POLICY.noDataAfterMs;
+    const insufficient = !latest || latest.assessment.thermal === 'unknown';
+    const noData = disconnected || insufficient;
+    const ruleLevel = latest?.assessment.thermal;
+    const status = state.alert?.level ?? (['warning', 'danger'].includes(ruleLevel) ? ruleLevel : noData ? 'no_data' : 'normal');
+    return {
+      id: state.bay.id, status, noData,
+      connecting: Boolean(latest && !disconnected && insufficient && latest.assessment.riseCPerS === null),
+      peakC: latest?.assessment.peakC ?? null, riseCPerS: latest?.assessment.riseCPerS ?? null,
+      isCharging: demo.isCharging, occupied: demo.occupied || SCENARIOS[activeScenario]?.bayId === state.bay.id,
+      alertId: state.alert?.id ?? null, frameSeq: latest?.frame.seq ?? null
+    };
+  }
+  const summaries = () => [...states.values()].map(state => summary(state));
+  function alerts() {
+    return [...states.values()].filter(state => state.alert).map(state => ({
+      ...state.alert, noData: summary(state).noData,
+      recovered: !summary(state).noData && state.frames.at(-1)?.assessment.thermal === 'normal'
+    })).sort((a, b) => (a.level === 'danger' ? 0 : 1) - (b.level === 'danger' ? 0 : 1) || a.createdAt.localeCompare(b.createdAt) || a.bayId.localeCompare(b.bayId));
+  }
+  function detail(id) {
+    const state = stateFor(id), latest = state.frames.at(-1);
+    return structuredClone({
+      bay: state.bay, summary: summary(state), frame: latest?.frame ?? null,
+      assessment: latest?.assessment ?? null, hotspot: latest?.hotspot ?? null,
+      history: state.frames.map(item => ({ seq: item.frame.seq, capturedAt: item.frame.capturedAt, peakC: item.assessment.peakC })),
+      alert: alerts().find(alert => alert.bayId === id) ?? null
+    });
+  }
+  return { reset, ingestSimulation, summaries, alerts, detail };
+}

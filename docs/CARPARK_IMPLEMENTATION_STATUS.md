@@ -28,10 +28,63 @@ $node = 'C:\Users\Admin1\AppData\Local\Programs\nodejs-v24.13.0\node.exe'
 | A：B2-08 前轮余热仿真 | 68°C，警告，无速率 | 65.2°C，警告 | 63.8°C，警告 | 第 60 秒后固定 62°C，警告 |
 | B：B2-02 车底异常仿真 | 38°C，unknown（界面应显示正在接入） | 60.4°C，警告 | 80°C，危险 | 第 46 秒起固定 86°C，危险 |
 
-### 边界与下一轮
+### 第 1 轮交付边界
 
 本轮交付纯函数与控制台效果，尚未接入服务端或首页。仿真值不是实测或物理模型结果，不进入现有 NASA 实测流程。
 
 场景开始必须由第 2 轮的播放器清空目标车位帧历史。本轮测试与控制台从 `previous = null` 开始，并复现了沿用旧背景帧会误报危险的问题；没有把纯函数测试描述为已实现服务端重置。
 
-下一轮：服务端仿真播放器、车位状态机、WS 摘要与演示控制接口。车位总览界面在第 3 轮，AI 编排与真实模型验证分别在第 6、7 轮。
+第 2 轮现已接入上述纯函数，见下文。
+
+## 第 2 轮：服务端播放器与车位状态
+
+- `backend/sim/player.mjs`：启动即产生 11 个车位的仿真首帧，每秒推进；B2-11 永不发帧。时钟与定时器可注入，重复推进同一秒不重复发帧；采样时间遵循逻辑时钟，避免定时器抖动制造危险速率。
+- `backend/bays.mjs`：复用共享规则引擎，严格校验 24 × 32 帧，每个车位只在内存保留最近 60 帧；首帧温度未达阈值时显示正在接入；超过 5 秒无新帧才断线；创建／升级规则告警，断线或降温不解除待处理告警。
+- `backend/carpark.mjs`：仿真会话、独立 SQLite `demo_sessions` / `bay_alerts` 表、重置与场景启动。所有仿真接口带来源与不可导出标识；不写入原 `telemetry` / `events` / `audit` 表。
+- `backend/server.mjs`：新增车位读取与演示控制 API，沿用本机来源与 CSRF 检查；WS `bays` 只发送 12 个车位的摘要，`alert` 发送新建／升级事件，完整矩阵仅通过车位详情 API 获取。
+- NASA 工作台仅响应 `telemetry` / `events` 消息，避免每秒的车位摘要触发实测记录刷新；浏览器回归新增此检查。
+
+### 已接入的接口
+
+| 方法／路径 | 内容 |
+|---|---|
+| `GET /api/carpark` | 布局、会话、12 个车位摘要 |
+| `GET /api/bays/B2-02` | 最新完整帧、规则结果、热点区域、60 帧最高温序列、当前告警 |
+| `GET /api/alerts` | 当前规则告警，危险优先，再按创建时间排序 |
+| `POST /api/demo/scenario` | `{ "name": "A", "ai": false }` 或场景 B；先清空当前会话，再从场景第 0 秒播放 |
+| `POST /api/demo/reset` | JSON 空对象 `{}`；删除当前演示会话及告警，开始新会话 |
+
+写接口需 `Content-Type: application/json` 与 `/api/health` 返回的 `X-Voltguard-Csrf`。输入无效返回 422，来源／CSRF 不符返回 403，未知车位返回 404。`POST /api/frames` 仍未实现。
+
+WS 沿用 `{ type, report }` 包装：`bays.report` 为 `{ session, bays, sourceType, exportable }`，`alert.report` 为 `{ event, alert }`。每批仅一次摘要；帧处理与推送在同一事件循环内完成。
+
+场景或重置后，11 个有帧车位的正常首帧仍短暂显示「正在接入」，下一秒收到可比较帧才显示正常；这是缺少速率证据时的设计行为。A 的超温首帧直接警告，B2-11 始终无数据。
+
+### 查看第 2 轮效果
+
+```powershell
+$node = 'C:\Users\Admin1\AppData\Local\Programs\nodejs-v24.13.0\node.exe'
+& $node scripts/check-carpark-server.mjs
+```
+
+该脚本以独立内存数据库启动真实 HTTP / WS 服务，用注入时钟跳至关键秒，输出 A/B 车位状态、重置结果和 WS 摘要检查。不使用用户数据库或真实 AI；不是实时性能基准。
+
+也可运行 `& $node serve.mjs` 后在浏览器打开 `http://127.0.0.1:4173/api/carpark` 或 `/api/bays/B2-02` 查看实时 JSON。启动场景 B 的本地示例：
+
+```powershell
+$base = 'http://127.0.0.1:4173'
+$health = Invoke-RestMethod "$base/api/health"
+$headers = @{ 'X-Voltguard-Csrf' = $health.csrf }
+Invoke-RestMethod "$base/api/demo/scenario" -Method Post -ContentType 'application/json' -Headers $headers -Body '{"name":"B","ai":false}'
+Invoke-RestMethod "$base/api/bays/B2-02"
+```
+
+### 测试与交付边界
+
+新增 `tests/bays.test.mjs`、`tests/sim-player.test.mjs`、`tests/carpark-server.test.mjs`：覆盖无数据边界、首帧告警、危险不自动降低、未处理告警保留、60 帧缓冲、输入校验、场景重接入、完整 A/B 时间表、定时器、独立持久化与重置、本机来源／CSRF、WS 摘要与本机推送延迟。`scripts/qa-browser.mjs` 新增车位 WS 不刷新 NASA 记录的浏览器检查。
+
+本轮没有车位网页界面、保安决定接口或 AI 调用。待处理告警没有人工处理入口，因此不会自动结束；处理中／已降级／重新告警与决定记录将在第 5 轮实现。
+
+演示控制的 `ai` 选择暂存为 `session.aiRequested`；`aiEnabled` / `aiConfigured` 均为 false，详情明确返回 `BAY_AI_NOT_IMPLEMENTED` 或 `AI_DISABLED`，不伪造 AI 结果。第 6 轮再接入编排，第 7 轮才做真实服务商验证。
+
+下一轮：第 3 轮车位总览界面、仿真横幅与演示控制面板。

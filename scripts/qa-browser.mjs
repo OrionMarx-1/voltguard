@@ -12,6 +12,9 @@ const browser=await chromium.launch({executablePath:'C:/Program Files (x86)/Micr
 const output=path.resolve('.sites-runtime/qa-v8');await fs.mkdir(output,{recursive:true});
 const context=await browser.newContext({viewport:{width:1440,height:1050}});
 const page=await context.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
+let carparkMessages=0,nasaApiReads=0;
+page.on('request',request=>{if(['/api/fleet','/api/events'].includes(new URL(request.url()).pathname))nasaApiReads++;});
+page.on('websocket',socket=>socket.on('framereceived',event=>{if(JSON.parse(String(event.payload)).type==='bays')carparkMessages++;}));
 try{
   await page.goto(base+'/?lang=en',{waitUntil:'networkidle'});
   await page.locator('#thermalTemperature').filter({hasNotText:'—'}).waitFor();
@@ -20,6 +23,11 @@ try{
   await page.locator('#operationsTab').click();
   await page.locator('#opsNasa').click();
   await page.locator('#opsRecordHeader').waitFor();
+  await page.waitForLoadState('networkidle');
+  const readsBefore=nasaApiReads,messagesBefore=carparkMessages;
+  await page.waitForTimeout(1200);
+  if(carparkMessages<=messagesBefore)throw new Error('No live carpark summary received in browser');
+  if(nasaApiReads!==readsBefore)throw new Error('Carpark WS updates unexpectedly refresh NASA records');
   const text=await page.locator('body').innerText();
   if(/[\u3400-\u9fff]/.test(text.replace('中文','')))throw new Error('Untranslated Chinese in English view: '+text.replace('中文','').match(/.{0,20}[\u3400-\u9fff].{0,20}/)?.[0]);
   if(!await page.locator('#opsSave').isEnabled())throw new Error('Local service unavailable');
@@ -47,5 +55,5 @@ try{
   await page.locator('#langButton').click();
   const detailText=await page.locator('body').innerText();if(/[\u3400-\u9fff]/.test(detailText.replace('中文','')))throw new Error('Untranslated detail text');
   if(errors.length)throw new Error(errors.join('\n'));
-  console.log(JSON.stringify({ok:true,downloads:true,bilingual:true,mobileOverflow:false,printPdf:true,import:true,pageErrors:errors,output},null,2));
+  console.log(JSON.stringify({ok:true,downloads:true,bilingual:true,mobileOverflow:false,printPdf:true,import:true,carparkWsIsolated:true,pageErrors:errors,output},null,2));
 }finally{await browser.close();await app.close();}

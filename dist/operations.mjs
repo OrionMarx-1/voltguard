@@ -255,7 +255,7 @@ function printReport() {
 function connect() {
   socket = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`);
   socket.onopen = () => { serviceAvailable=true; refreshService().catch(()=>{}); };
-  socket.onmessage = event => { const data=JSON.parse(event.data); if(data.type!=='heartbeat'&&data.type!=='connected')refreshService().catch(()=>{serviceAvailable=false;render();}); };
+  socket.onmessage = event => { const data=JSON.parse(event.data); if(['telemetry','events'].includes(data.type))refreshService().catch(()=>{serviceAvailable=false;render();}); };
   socket.onerror = () => socket.close();
   socket.onclose = () => { serviceAvailable=false; render(); setTimeout(async()=>{try{backend=await api('/api/health');connect();}catch{connect();}},5000); };
 }
