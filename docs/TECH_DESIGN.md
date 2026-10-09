@@ -11,6 +11,8 @@
 >
 > 第 3 轮讨论（2026-10-09）：保安操作分「定级别」与「附加动作」，可自行降级（仅警告）；队列分待处理 / 处理中两段；降级后三条件重新告警；已处理告警连续 10 秒正常自动结束（3.4、3.5）。
 >
+> 第 4 轮讨论（2026-10-09）：决定记录存点按钮时的帧，AI 帧经 AI 记录关联；值班员自报名称或代号；降级不强制理由，改记 `viewedMs`；「无法判断」不得建议降级；已处理告警可再操作，记录只追加（3.5）。
+>
 > 标「建议」的条目是本稿提出、尚未确认的参数或细则。
 
 ## 1. 设计原则
@@ -175,25 +177,31 @@
 
 ### 3.5 决定记录
 
-每次保安操作一行，字段：
+（第 4 轮已确认 2026-10-09）
+
+每次保安操作一行，**只追加、不覆盖**：已处理的告警可以再操作（随时可升级；警告级别时可在维持与降级之间改变；随时可追加附加动作），每次另记一行，告警的当前状态以最新一行为准。字段：
 
 | 字段 | 内容 |
 |---|---|
 | `alertId`、`bayId` | 所属告警与车位 |
-| `operator` | 值班员名称：开班时在浏览器输入，随每次操作提交；**不验证身份**，界面与记录均标明 |
+| `operator` | 值班员名称或代号（1–20 字）：开班时在浏览器输入，随每次操作提交；**不验证身份**，界面与记录均注明「未验证」。用户测试时填参与者代号（P1、P2、P3） |
 | `at` | 服务端时间 |
 | `level` | 定级别：`downgrade` / `maintain` / `escalate`；只记录附加动作时为空 |
 | `extras` | 附加动作：`dispatch_patrol` / `notify_manager` / `call_999` 的子集 |
 | `aiStance` | `confirmed`（确认 AI 建议）/ `rejected`（驳回）/ `none`（AI 不可用或关闭） |
 | `levelBefore`、`levelAfter` | 告警级别变化 |
 | `aiRunId` | 依据的 AI 说明；AI 不可用时为空并记 `aiUnavailable: true` |
-| `frameSeq`、`frame` | 依据的帧序号与完整矩阵（约 4 KB，使记录自足） |
+| `frameSeq`、`frame` | 保安点按钮时的最新帧序号与完整矩阵（约 4 KB，使记录自足）。AI 看的那一帧存在 `bay_ai_runs` 中，经 `aiRunId` 关联，两帧都可查 |
+| `viewedMs` | 本次打开车位详情到提交决定的毫秒数，由浏览器测量后提交；用于用户测试分析「是否看图就确认」，不作为操作限制 |
 | `sessionId` | 演示会话；实测时为空 |
+
+- 降级不强制选理由（PRD 第 10 部分的「过度依赖 AI」改用 `viewedMs` 观察）。
 
 服务端校验（不通过返回 409，界面提示原因）：
 - 告警级别为 `danger` 时，任何操作都不能使级别降低（AI 建议与保安自行降级同样适用）。
 - `aiStance = confirmed` 时，`level` 必须等于该次 AI 建议。
-- 确认的 AI 建议若为降级，AI 成因不得为「电池区域异常」或「无法判断」（后者为**建议**补充的规则）。
+- 确认的 AI 建议若为降级，AI 成因不得为「电池区域异常」或「无法判断」（与 5.3 的输出校验重复把关）。
+- `operator` 为空或超过 20 字时拒绝。
 - 提交的 `aiRunId` 必须是该告警当前级别下最新的一次 AI 结果；告警在 AI 返回后已升级的，旧建议作废，不能被确认。
 - 「拨打 999」只记录保安的选择并显示 `tel:999` 链接，系统不会自动拨号。
 
@@ -256,7 +264,7 @@
 3. `cause = battery_zone_anomaly` 时不得 `downgrade`。
 4. `call_999` 只能与 `escalate` 同时出现。
 5. `rationale` 不含数字，不含安全保证、灭火、断电、通风、拆卸等用语（沿用 `copilot.mjs` 中的检查正则）。
-6. **建议补充**：`cause = undetermined` 时不得 `downgrade`。
+6. `cause = undetermined` 时不得 `downgrade`（第 4 轮确认，已补入 PRD）。
 
 热点位置与局限两个字段由程序附加，不经模型。
 
@@ -333,7 +341,7 @@ complete({ system, text, imagePng, schema, timeoutMs }) // → { json, latencyMs
 |---|---|
 | `demo_sessions` | `id`、`started_at`、`scenario`、`ai_enabled` |
 | `bay_alerts` | `id`、`session_id`、`bay_id`、`level`、`status`、`created_at`、`updated_at` |
-| `bay_ai_runs` | `id`、`alert_id`、`level_at_request`、`frame_seq`、`model`、`latency_ms`、`ok`、`error_code`、`output`、`created_at` |
+| `bay_ai_runs` | `id`、`alert_id`、`level_at_request`、`frame_seq`、`frame`（AI 看的完整矩阵）、`model`、`latency_ms`、`ok`、`error_code`、`output`、`created_at` |
 | `bay_decisions` | 见 3.5 |
 
 - `session_id` 非空即为仿真；所有导出接口排除这些行。重置时按 `session_id` 删除。
@@ -346,7 +354,7 @@ complete({ system, text, imagePng, schema, timeoutMs }) // → { json, latencyMs
 | `GET /api/carpark` | 布局配置 + 全部车位摘要 + 当前会话信息 |
 | `GET /api/bays/:id` | 最新帧矩阵、规则结果、热点区域、最近 60 秒最高温序列、当前告警、最新 AI 结果、决定记录 |
 | `GET /api/alerts` | 告警队列 |
-| `POST /api/alerts/:id/decisions` | `{ level, extras, aiStance, aiRunId, frameSeq, operator }`；违反 3.5 校验返回 409 |
+| `POST /api/alerts/:id/decisions` | `{ level, extras, aiStance, aiRunId, operator, viewedMs }`（帧由服务端取当时最新帧，不由浏览器提交）；违反 3.5 校验返回 409 |
 | `POST /api/demo/scenario`、`POST /api/demo/reset` | 演示控制 |
 | `POST /api/frames` | 预留给真实网关，MVP 不实现 |
 
@@ -381,6 +389,7 @@ complete({ system, text, imagePng, schema, timeoutMs }) // → { json, latencyMs
 | `ai-provider.test.mjs` | 请求格式、json_schema 退回 json_object、密钥不出现在日志与响应中 |
 | `carpark-server.test.mjs` | 路由、CSRF、409 校验、重置清空、仿真行不出现在导出中、帧到 WS 推送 ≤ 1 秒 |
 | **危险不降级** | 逐帧播放两个场景，测试替身每次都建议降级、保安每次都确认，并且每帧再尝试一次保安自行降级：断言危险级别被降级 0 次 |
+| 决定记录 | 记录只追加；已处理告警再操作（升级、维持与降级互改）；存服务端最新帧且与 AI 帧可分别查到；`operator` 长度校验；`viewedMs` 原样保存 |
 | 告警生命周期 | 两类操作的效果、拨打 999 视为升级、队列两段排序、未处理告警恢复正常仍留在待处理、已处理告警 10 秒正常后结束 |
 
 ### 10.2 浏览器验证
@@ -411,11 +420,9 @@ complete({ system, text, imagePng, schema, timeoutMs }) // → { json, latencyMs
 | 事项 | 现状 / 建议 |
 |---|---|
 | 视角盲区 | 已确认车道对面斜拍（3.1）；车尾、后半段车底和车侧看不到，已列入 PRD 风险表 |
-| `undetermined` 不得降级 | 建议补入 PRD 第 5 部分的一致性检查 |
 | 原型参数 | 无数据 5 秒、重新告警 +3°C、告警结束 10 秒已在第 2、3 轮确认；均需日后按真实数据校准 |
 | AI 的增量价值 | 两个演示场景中，程序给出的区域与升温趋势几乎就能决定答案。演示时应如实说明；AI 是否能从热点形状与分布上提供额外判断，要靠 10.3 的真实检查与日后的真实热像样本 |
 | 服务商 | 需团队核实香港可用性与数据政策并申请密钥（5.5） |
 | 操作人身份 | 只记录自报名称，不做身份验证（PRD 第 9 部分不做账号权限） |
-| 确认降级时是否必须选理由 | PRD 第 10 部分「可考虑」，本稿未纳入 |
 | 巡逻保安交接 | 现有前线模式绑定 NASA 报告；车位版交接放在第 8 轮，范围待定 |
 | 真实设备噪声 | 接真实设备前须加平滑（第 4 部分） |
