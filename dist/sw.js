@@ -1,4 +1,4 @@
-const CACHE_NAME = 'voltguard-demo-v12';
+const CACHE_NAME = 'voltguard-demo-v13';
 const CORE_ASSETS = [
   './',
   './operations.css',
@@ -11,6 +11,11 @@ const CORE_ASSETS = [
   './field-mode.mjs',
   './thermal.css',
   './thermal.mjs',
+  './carpark/carpark.css',
+  './carpark/carpark.mjs',
+  './carpark/layout.mjs',
+  './carpark/state.mjs',
+  './data/carpark-b2.json',
   './thermal-ux.mjs',
   './thermal-simulation.mjs',
   './ux-accessibility.mjs',
@@ -63,7 +68,7 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  if (url.pathname.includes('/data/') || url.pathname.includes('/vendor/three/') || /\/(operations\.(css|mjs)|(?:safety|evidence|guidance|field-mode|ux-accessibility)\.mjs|copilot(?:-panel)?\.(css|mjs)|thermal(?:-map|-3d|-ux|-simulation)?\.(css|mjs))$/.test(url.pathname)) {
+  if (url.pathname.includes('/data/') || url.pathname.includes('/carpark/') || url.pathname.includes('/vendor/three/') || /\/(operations\.(css|mjs)|(?:safety|evidence|guidance|field-mode|ux-accessibility)\.mjs|copilot(?:-panel)?\.(css|mjs)|thermal(?:-map|-3d|-ux|-simulation)?\.(css|mjs))$/.test(url.pathname)) {
     event.respondWith(
       caches.match(request, { ignoreSearch: true }).then(cached => cached || fetch(request).then(response => {
         if (response.ok) {

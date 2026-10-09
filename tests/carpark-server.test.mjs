@@ -68,7 +68,12 @@ test('scenario startup clears baseline rate history, A stays warning and B cross
     assert.equal(detail.summary.status, 'warning'); assert.equal(detail.assessment.riseCPerS, null);
     assert.equal(detail.hotspot.zone, 'wheel'); assert.equal(detail.history.length, 1);
     assert.equal(detail.ai.errorCode, 'AI_DISABLED'); assert.equal(detail.session.aiRequested, false);
-    for (let t = 1; t <= 60; t++) { f.tick(); assert.equal(f.app.carpark.detail('B2-08').summary.status, 'warning', `A second ${t}`); }
+    for (let t = 1; t <= 60; t++) {
+      f.tick(); assert.equal(f.app.carpark.detail('B2-08').summary.status, 'warning', `A second ${t}`);
+      // Let HTTP keep-alive timers/socket close events run during the virtual replay.
+      // Blocking for a full minute's computation can otherwise reuse an expired socket.
+      await new Promise(setImmediate);
+    }
     response = await f.post('/api/demo/scenario', { name: 'B', ai: true }); assert.equal(response.status, 200);
     detail = await f.get('/api/bays/B2-02');
     assert.equal(detail.summary.connecting, true); assert.equal(detail.assessment.riseCPerS, null);
@@ -81,6 +86,7 @@ test('scenario startup clears baseline rate history, A stays warning and B cross
       assert.ok(bay.assessment.riseCPerS < 2);
       if (t === 28) alertId = bay.alert.id;
       if (t >= 28) assert.equal(bay.alert.id, alertId);
+      await new Promise(setImmediate);
     }
     assert.equal((await f.get('/api/alerts')).alerts.length, 1);
     assert.equal((await f.get('/api/alerts')).alerts[0].level, 'danger');

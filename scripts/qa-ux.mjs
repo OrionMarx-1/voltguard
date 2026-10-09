@@ -9,7 +9,7 @@ const base=`http://127.0.0.1:${app.server.address().port}`,out=path.resolve('.si
 const browser=await chromium.launch({executablePath:'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',headless:true});
 const context=await browser.newContext({viewport:{width:1440,height:1000},serviceWorkers:'block'}),page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
 async function ready(p){await p.locator('#thermalTemperature').filter({hasNotText:'—'}).waitFor();}
-async function overflow(p){assert.equal(await p.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);}
+async function overflow(p){const result=await p.evaluate(()=>({width:innerWidth,scrollWidth:document.documentElement.scrollWidth,offenders:[...document.querySelectorAll('body *')].filter(el=>el.getBoundingClientRect().right>innerWidth||(el.clientWidth>0&&el.scrollWidth>el.clientWidth)).slice(0,12).map(el=>({id:el.id,className:String(el.className),right:el.getBoundingClientRect().right,width:el.getBoundingClientRect().width,scrollWidth:el.scrollWidth}))}));assert.equal(result.scrollWidth>result.width,false,JSON.stringify(result));}
 try{
  await page.goto(base+'/?lang=en',{waitUntil:'networkidle'});await ready(page);
  await page.screenshot({path:path.join(out,'thermal-en-desktop.png')});
