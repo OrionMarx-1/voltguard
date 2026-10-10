@@ -24,17 +24,17 @@ test('only lifecycle events trigger AI; accepted suggestions store AI input sepa
   const f = fixture({ ...stub, complete: args => { calls++; return stub.complete(args); } });
   try {
     f.carpark.play({ name: 'A', ai: true }); await settle(f, 'B2-08');
-    const initial = f.carpark.detail('B2-08'); assert.equal(initial.ai.output.recommendation, 'downgrade'); assert.equal(initial.ai.testStub, true); assert.equal(calls, 1);
+    const initial = f.carpark.detail('B2-08'); assert.equal(initial.ai.output.recommendation, 'maintain'); assert.equal(initial.ai.testStub, true); assert.equal(calls, 1);
     for (let t = 0; t < 5; t++) { f.tick(1); await flush(); }
     assert.equal(calls, 1); const alertId = initial.alert.id, aiRunId = initial.ai.id;
-    f.carpark.decide(alertId, choice('downgrade', 'confirmed', aiRunId));
+    f.carpark.decide(alertId, choice('maintain', 'confirmed', aiRunId));
     const after = f.carpark.detail('B2-08'), record = after.decisions[0];
-    assert.equal(after.alert.status, 'downgraded'); assert.equal(after.summary.status, 'warning');
+    assert.equal(after.alert.status, 'processing'); assert.equal(after.summary.status, 'warning');
     assert.equal(record.aiUnavailable, false); assert.equal(record.aiRun.id, aiRunId); assert.equal(record.aiRun.frameSeq, initial.frame.seq);
     assert.equal(record.frameSeq, after.frame.seq); assert.notEqual(record.frameSeq, record.aiRun.frameSeq);
     assert.equal(record.exportable, false); assert.equal(record.sourceType, 'simulation');
     f.carpark.decide(alertId, choice('maintain', 'rejected', aiRunId)); assert.equal(f.carpark.detail('B2-08').decisions.at(-1).aiStance, 'rejected');
-    assert.throws(() => f.carpark.decide(alertId, choice('maintain', 'confirmed', aiRunId)), /AI_LEVEL_MISMATCH/);
+    assert.throws(() => f.carpark.decide(alertId, choice('downgrade', 'confirmed', aiRunId)), /AI_LEVEL_MISMATCH/);
     f.carpark.decide(alertId, choice('escalate')); await settle(f, 'B2-08');
     assert.equal(calls, 2); assert.equal(f.carpark.detail('B2-08').aiRuns[0].status, 'stale');
     assert.throws(() => f.carpark.decide(alertId, choice('maintain', 'confirmed', aiRunId)), /AI_STALE/);
@@ -68,8 +68,12 @@ test('malicious provider always asks for downgrade: every A/B frame preserves da
       for (let t = 0; t <= 50; t++) {
         if (t) f.tick(1); await settle(f, bay); const detail = f.carpark.detail(bay);
         if (detail.alert?.level === 'danger') {
-          assert.equal(detail.ai.status, 'unavailable'); assert.equal(detail.ai.output, null); assert.equal(detail.ai.errorCode, 'AI_OUTPUT_DOWNGRADE');
+          assert.equal(detail.ai.status, 'unavailable'); assert.equal(detail.ai.output, null); assert.equal(detail.ai.errorCode, 'AI_OUTPUT_DOWNGRADE_RULE');
           assert.throws(() => f.carpark.decide(detail.alert.id, choice('downgrade')), /DANGER_NO_DOWNGRADE/);
+        }
+        if (scenario === 'A') {
+          assert.equal(detail.ai.status, 'unavailable'); assert.equal(detail.ai.errorCode, 'AI_OUTPUT_DOWNGRADE_RULE'); assert.equal(detail.ai.output, null);
+          assert.equal(detail.alert.status, 'pending');
         }
         if (scenario === 'A' && detail.ai.status === 'available') f.carpark.decide(detail.alert.id, choice('downgrade', 'confirmed', detail.ai.id));
       }
@@ -119,7 +123,7 @@ test('AI API decisions are CSRF protected, persisted, and excluded from measured
     const csrf = (await (await fetch(base + '/api/health')).json()).csrf;
     const post = (route, input, token = csrf) => fetch(base + route, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Voltguard-Csrf': token }, body: JSON.stringify(input) });
     await post('/api/demo/scenario', { name: 'A', ai: true }); await settle({ carpark: app.carpark }, 'B2-08');
-    const detail = await (await fetch(base + '/api/bays/B2-08')).json(), input = choice('downgrade', 'confirmed', detail.ai.id), route = `/api/alerts/${detail.alert.id}/decisions`;
+    const detail = await (await fetch(base + '/api/bays/B2-08')).json(), input = choice('maintain', 'confirmed', detail.ai.id), route = `/api/alerts/${detail.alert.id}/decisions`;
     assert.equal((await post(route, input, '')).status, 403); assert.equal((await post(route, { ...input, aiRunId: 'old' })).status, 409);
     assert.equal((await post(route, input)).status, 201); assert.equal(app.carpark.detail('B2-08').decisions.length, 1);
     assert.equal((await (await fetch(base + '/api/events')).json()).events.length, 0); assert.equal((await (await fetch(base + '/api/fleet')).json()).records.length, 0);

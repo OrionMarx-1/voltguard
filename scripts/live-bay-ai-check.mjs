@@ -20,10 +20,26 @@ export function buildBayCheckCases() {
       time = epoch + second * 1000;
       monitor.ingestSimulation({ schemaVersion: 'voltguard-frame-1', bayId: SCENARIOS[scenario].bayId, seq: second + 1, capturedAt: new Date(time).toISOString(), temperaturesC: frameAt(scenario, second) });
       if (seconds.includes(second)) cases.push({ scenario, second, detail: monitor.detail(SCENARIOS[scenario].bayId),
-        expected: scenario === 'A' ? { cause: 'brake_residual_heat', recommendation: 'downgrade' } : { cause: 'battery_zone_anomaly', recommendation: 'escalate' } });
+        expected: scenario === 'A' ? { cause: 'brake_residual_heat', recommendation: second === 0 ? 'maintain' : 'downgrade' } : { cause: 'battery_zone_anomaly', recommendation: 'escalate' } });
     }
   }
   return cases;
+}
+
+// Evaluation-only synthetic counterexamples. Never registered with the demo player.
+export function buildBayDowngradeCounterexamples() {
+  const epoch = Date.parse('2026-10-10T00:00:00Z');
+  return ['rising_wheel', 'cooling_underbody'].map(name => {
+    let time = epoch; const monitor = createBayMonitor({ now: () => time }); monitor.reset('counterexample');
+    const base = frameAt(name === 'rising_wheel' ? 'A' : 'B', name === 'rising_wheel' ? 0 : 28);
+    for (let second = 0; second <= 30; second++) {
+      time = epoch + second * 1000;
+      const delta = name === 'rising_wheel' ? (second - 30) * 1.2 : (30 - second) * .1;
+      monitor.ingestSimulation({ schemaVersion: 'voltguard-frame-1', bayId: 'B2-02', seq: second + 1, capturedAt: new Date(time).toISOString(), temperaturesC: base.map(row => row.map(value => value + delta)) });
+    }
+    return { scenario: name, second: 30, testOnly: true, sourceType: 'simulation', exportable: false, detail: monitor.detail('B2-02'),
+      expected: { cause: name === 'rising_wheel' ? 'brake_residual_heat' : 'battery_zone_anomaly', recommendation: 'maintain' } };
+  });
 }
 
 export function prepareBayCheckInput(sample, group) {
@@ -65,6 +81,7 @@ export async function runLiveBayCheck({ provider, repeats = 3, cases = buildBayC
       responseFormat: null, requests: null };
     try {
       const input = prepareBayCheckInput(sample, group), remaining = timeoutMs - (clock() - started);
+      const sentEvidence = JSON.parse(group === 'formal' ? input.text : prepareBayAIInput(sample.detail, sample.detail.alert).text);
       row.imageSha256 = createHash('sha256').update(input.imagePng).digest('hex');
       row.inputSha256 = createHash('sha256').update(JSON.stringify(input)).digest('hex');
       if (remaining <= 0) throw new BayAIError('AI_TIMEOUT');
@@ -74,7 +91,7 @@ export async function runLiveBayCheck({ provider, repeats = 3, cases = buildBayC
       row.model = result.model; row.responseFormat = result.responseFormat ?? null; row.requests = result.requests ?? null;
       if (clock() - started >= timeoutMs) throw new BayAIError('AI_TIMEOUT');
       row.rejectedOutput = result.json;
-      row.output = validateBayAIOutput(result.json, sample.detail.alert.level); row.ok = true;
+      row.output = validateBayAIOutput(result.json, row.ruleLevel, sentEvidence); row.ok = true;
       delete row.rejectedOutput;
       row.causeMatch = row.output.cause === sample.expected.cause; row.recommendationMatch = row.output.recommendation === sample.expected.recommendation;
       row.expectedMatch = row.causeMatch && row.recommendationMatch;

@@ -11,7 +11,10 @@ export function createBayAIStub({ mode = 'success', delayMs = 350 } = {}) {
     if (mode === 'error') throw new BayAIError('AI_PROVIDER_ERROR');
     if (mode === 'refusal') throw new BayAIError('AI_REFUSAL');
     const evidence = JSON.parse(text), wheel = evidence.hotspotRegion?.en === 'Front wheels' || evidence.hotspotRegion?.en === 'Rear wheels';
-    const output = wheel ? { cause: 'brake_residual_heat', recommendation: evidence.alertLevel === 'danger' ? 'maintain' : 'downgrade',
+    const eligible = evidence.alertLevel === 'warning' && evidence.hotspotRegionId !== 'underbody' &&
+      [evidence.peakC, evidence.peak10SecondsAgoC, evidence.peak30SecondsAgoC].every(Number.isFinite) &&
+      evidence.peakC <= evidence.peak10SecondsAgoC && evidence.peakC <= evidence.peak30SecondsAgoC;
+    const output = wheel ? { cause: 'brake_residual_heat', recommendation: eligible ? 'downgrade' : 'maintain',
       rationale_zh: '測試替身的預設說明：熱點集中在車輪位置，供操作流程驗證。', rationale_en: 'Preset test-stub explanation: the hotspot is concentrated near the wheel, for workflow testing.', next_steps: ['observe'] } :
       { cause: 'battery_zone_anomaly', recommendation: 'escalate', rationale_zh: '測試替身的預設說明：車底熱點持續升溫，供操作流程驗證。', rationale_en: 'Preset test-stub explanation: the underbody hotspot is rising, for workflow testing.', next_steps: ['dispatch_patrol', 'notify_manager'] };
     if (mode === 'invalid') output.rationale_en = 'Guaranteed safe 99';

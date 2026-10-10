@@ -7,18 +7,30 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadLocalEnv } from '../backend/local-env.mjs';
 import { createAIProvider, BayAIError } from '../backend/ai-provider.mjs';
-import { prepareBayAIInput, BAY_AI_RATIONALE_INSTRUCTION } from '../backend/bay-ai-output.mjs';
-import { buildBayCheckCases, prepareBayCheckInput, runLiveBayCheck, summarizeBayChecks, saveBayCheckReport } from '../scripts/live-bay-ai-check.mjs';
+import { prepareBayAIInput, validateBayAIOutput, BAY_AI_RATIONALE_INSTRUCTION } from '../backend/bay-ai-output.mjs';
+import { buildBayCheckCases, buildBayDowngradeCounterexamples, prepareBayCheckInput, runLiveBayCheck, summarizeBayChecks, saveBayCheckReport } from '../scripts/live-bay-ai-check.mjs';
 
 const samples = buildBayCheckCases();
 const reply = expected => ({ ...expected, rationale_zh: '熱源分布仍需由現場人員核實。', rationale_en: 'The heat distribution requires a site inspection.', next_steps: ['observe'] });
 const noKey = createAIProvider({ apiKey: '', enabled: false, fetchImpl: () => assert.fail('No real call allowed') });
+
+test('counterexamples are test-only charging-bay frames and cannot authorize downgrade', () => {
+  const cases = buildBayDowngradeCounterexamples();
+  assert.deepEqual(cases.map(sample => sample.scenario), ['rising_wheel', 'cooling_underbody']);
+  for (const sample of cases) {
+    const data = JSON.parse(prepareBayCheckInput(sample, 'formal').text);
+    assert.equal(sample.testOnly, true); assert.equal(sample.exportable, false); assert.equal(data.isChargingBay, true);
+    assert.throws(() => validateBayAIOutput(reply({ cause: 'brake_residual_heat', recommendation: 'downgrade' }), data.alertLevel, data), { code: 'AI_OUTPUT_DOWNGRADE_RULE' });
+  }
+  assert.equal(cases[0].detail.hotspot.zone, 'wheel'); assert.equal(cases[1].detail.hotspot.zone, 'underbody');
+});
 
 test('evaluation cases use real scene generators and history: A start/middle/end; B warning/danger', () => {
   assert.deepEqual(samples.map(sample => [sample.scenario, sample.second, sample.detail.alert.level]), [['A', 0, 'warning'], ['A', 30, 'warning'], ['A', 60, 'warning'], ['B', 28, 'warning'], ['B', 42, 'danger']]);
   const data = JSON.parse(prepareBayCheckInput(samples[1], 'formal').text);
   assert.equal(data.peak10SecondsAgoC, 66); assert.equal(data.peak30SecondsAgoC, 68); assert.equal(samples[0].detail.assessment.riseCPerS, null);
   assert.equal(JSON.parse(prepareBayCheckInput(samples[4], 'formal').text).peakC, 80);
+  assert.deepEqual(samples.map(sample => sample.expected.recommendation), ['maintain', 'downgrade', 'downgrade', 'escalate', 'escalate']);
 });
 
 test('formal input is identical to production; image-only receives no identity, region, severity, trend or charging evidence', () => {
@@ -70,8 +82,8 @@ test('provider errors and invalid output are failures; safe unexpected conclusio
 test('evaluation deadline includes provider wait and rejects late/uncooperative providers; danger downgrade is never valid', async () => {
   const hung = await runLiveBayCheck({ provider: { configured: true, kind: 'test_stub', complete: () => new Promise(() => {}) }, cases: [samples[0]], repeats: 1, timeoutMs: 100 });
   assert.ok(hung.rows.every(row => row.errorCode === 'AI_TIMEOUT')); assert.equal(hung.summary.formal.validatedWithin10SecondsRate, 0);
-  const danger = await runLiveBayCheck({ provider: { configured: true, kind: 'test_stub', complete: async () => ({ json: reply(samples[0].expected), model: 'malicious-fixture' }) }, cases: [samples[4]], repeats: 1 });
-  assert.ok(danger.rows.every(row => row.errorCode === 'AI_OUTPUT_DOWNGRADE'));
+  const danger = await runLiveBayCheck({ provider: { configured: true, kind: 'test_stub', complete: async () => ({ json: reply({ ...samples[0].expected, recommendation: 'downgrade' }), model: 'malicious-fixture' }) }, cases: [samples[4]], repeats: 1 });
+  assert.ok(danger.rows.every(row => row.errorCode === 'AI_OUTPUT_DOWNGRADE_RULE'));
 });
 
 test('latency summary uses the full denominator, accurate percentiles and null for absent validated data', () => {

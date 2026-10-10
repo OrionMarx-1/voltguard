@@ -34,13 +34,13 @@ try {
   assert.equal(await page.locator('#cpAiToggle').isEnabled(), true); assert.equal(await page.locator('#cpAiToggle').isChecked(), true);
   await page.locator('#cpOperator').fill('P1'); await startA(); await available();
   assert.match(await page.locator('#cpAiStub').innerText(), /TEST STUB.*Not a real model/);
-  assert.match(await page.locator('#cpAiRecommendation').innerText(), /Downgrade.*Wheel residual/);
+  assert.match(await page.locator('#cpAiRecommendation').innerText(), /Maintain.*Wheel residual/);
   assert.match(await page.locator('#cpAiHotspot').innerText(), /Front wheels/);
   const initialRun = app.carpark.detail('B2-08').ai, callsBeforeLanguage = calls;
   await page.locator('#langButton').click(); assert.match(await page.locator('#cpAiRationale').innerText(), /測試替身/);
   await page.locator('#langButton').click(); assert.equal(calls, callsBeforeLanguage);
   tick(2); await page.waitForFunction(() => !document.querySelector('#cpAiConfirm').disabled);
-  await page.locator('#cpAiConfirm').click(); assert.equal(await page.locator('#cpLeveldowngrade').isChecked(), true);
+  await page.locator('#cpAiConfirm').click(); assert.equal(await page.locator('#cpLevelmaintain').isChecked(), true);
   assert.equal(app.carpark.detail('B2-08').decisions.length, 0);
   await page.locator('#cpDecisionSubmit').click(); await count(1);
   const saved = app.carpark.detail('B2-08').decisions[0];
@@ -53,11 +53,11 @@ try {
   assert.equal(await page.locator('#cpAiRuns canvas').first().isVisible(), true);
   await page.locator('#cpAiHistoryTitle').click();
   await capture('ai-stub-accepted-en.png');
-  await page.locator('#cpAiReject').click(); assert.equal(await page.locator('#cpLeveldowngrade').isChecked(), false);
+  await page.locator('#cpAiReject').click(); assert.equal(await page.locator('#cpLevelmaintain').isChecked(), false);
   await page.locator('#cpDecisionSubmit').click(); assert.match(await page.locator('#cpDecisionFeedback').innerText(), /Choose a level/);
   await page.locator('#cpLevelmaintain').check(); await page.locator('#cpDecisionSubmit').click(); await count(2);
   assert.equal(app.carpark.detail('B2-08').decisions[1].aiStance, 'rejected');
-  await page.locator('#cpAiConfirm').click(); await page.locator('#cpLevelmaintain').check(); await page.locator('#cpDecisionSubmit').click(); await count(3);
+  await page.locator('#cpAiConfirm').click(); await page.locator('#cpLeveldowngrade').check(); await page.locator('#cpDecisionSubmit').click(); await count(3);
   assert.equal(app.carpark.detail('B2-08').decisions[2].aiStance, 'rejected');
 
   await page.locator('#cpAiToggle').uncheck(); const disabledCalls = calls;

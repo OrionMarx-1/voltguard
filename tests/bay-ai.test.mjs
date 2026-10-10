@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { inflateSync } from 'node:zlib';
 import { createAIProvider, BayAIError } from '../backend/ai-provider.mjs';
 import { createBayAI, publicAIRun } from '../backend/bay-ai.mjs';
-import { prepareBayAIInput, validateBayAIOutput, BAY_AI_SCHEMA } from '../backend/bay-ai-output.mjs';
+import { prepareBayAIInput, validateBayAIOutput, BAY_AI_SCHEMA, BAY_AI_DOWNGRADE_INSTRUCTION } from '../backend/bay-ai-output.mjs';
 import { bayFrameImage } from '../backend/frame-image.mjs';
 import { createBayMonitor } from '../backend/bays.mjs';
 import { normalizeDecision } from '../backend/bay-decisions.mjs';
@@ -11,6 +11,7 @@ import { createAIWaitClock } from '../dist/carpark/ai-view.mjs';
 import { temperatureColor } from '../dist/thermal-map.mjs';
 
 const output = () => ({ cause: 'brake_residual_heat', recommendation: 'downgrade', rationale_zh: '輪區熱源分布較集中，建議持續觀察。', rationale_en: 'Heat is concentrated near the wheels. Continue observing.', next_steps: ['observe'] });
+const eligibleEvidence = () => ({ alertLevel: 'warning', hotspotRegionId: 'wheel', peakC: 64, peak10SecondsAgoC: 65, peak30SecondsAgoC: 68, isChargingBay: true, isCharging: true });
 const flush = () => new Promise(setImmediate), sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 function evidence() {
   const monitor = createBayMonitor({ now: () => Date.parse('2026-10-09T00:00:30Z') }); monitor.reset('session');
@@ -46,14 +47,47 @@ test('AI input contains one image and minimal evidence, resolves rear-facing lab
 });
 
 test('independent validation rejects schema, unsafe instructions, numbers, invalid actions and protected downgrades', () => {
-  assert.deepEqual(validateBayAIOutput(output(), 'warning'), output());
+  assert.deepEqual(validateBayAIOutput(output(), 'warning', eligibleEvidence()), output());
   for (const change of [null, { ...output(), extra: true }, { ...output(), cause: 'fire' }, { ...output(), recommendation: 'close' },
     { ...output(), rationale_en: 'Read 60 degrees' }, { ...output(), rationale_en: 'Guaranteed safe' }, { ...output(), rationale_en: 'Disconnect power' },
     { ...output(), rationale_zh: '請拆卸電池' }, { ...output(), rationale_zh: 'x'.repeat(81) }, { ...output(), rationale_en: 'x'.repeat(301) },
     { ...output(), next_steps: [] }, { ...output(), next_steps: ['observe', 'observe'] }, { ...output(), next_steps: ['extinguish'] },
-    { ...output(), next_steps: ['call_999'] }, { ...output(), cause: 'battery_zone_anomaly' }, { ...output(), cause: 'undetermined' }]) assert.throws(() => validateBayAIOutput(change, 'warning'), BayAIError);
+    { ...output(), next_steps: ['call_999'] }, { ...output(), cause: 'battery_zone_anomaly' }, { ...output(), cause: 'undetermined' }]) assert.throws(() => validateBayAIOutput(change, 'warning', eligibleEvidence()), BayAIError);
   assert.throws(() => validateBayAIOutput(output(), 'danger'), /AI_OUTPUT_DOWNGRADE/);
   assert.equal(validateBayAIOutput({ ...output(), cause: 'battery_zone_anomaly', recommendation: 'escalate', next_steps: ['call_999'] }, 'danger').recommendation, 'escalate');
+});
+
+test('downgrade requires warning, non-underbody and both non-rising historical peaks; it is never rewritten', () => {
+  for (const change of [{ peak10SecondsAgoC: null }, { peak30SecondsAgoC: null }, { hotspotRegionId: 'underbody' },
+    { peak10SecondsAgoC: 63 }, { peak30SecondsAgoC: 63 }, { alertLevel: 'danger' }, { alertLevel: 'normal' }, { peakC: NaN }]) {
+    const input = output(), data = { ...eligibleEvidence(), ...change };
+    assert.throws(() => validateBayAIOutput(input, data.alertLevel, data), { code: 'AI_OUTPUT_DOWNGRADE_RULE' });
+    assert.equal(input.recommendation, 'downgrade');
+    assert.equal(validateBayAIOutput({ ...input, recommendation: 'maintain' }, data.alertLevel, data).recommendation, 'maintain');
+  }
+  assert.throws(() => validateBayAIOutput(output(), 'warning'), { code: 'AI_OUTPUT_DOWNGRADE_RULE' });
+  assert.throws(() => validateBayAIOutput(output(), 'danger', eligibleEvidence()), { code: 'AI_OUTPUT_DOWNGRADE_RULE' });
+  assert.deepEqual(validateBayAIOutput(output(), 'warning', eligibleEvidence()), output());
+  assert.deepEqual(validateBayAIOutput(output(), 'warning', { ...eligibleEvidence(), peak10SecondsAgoC: 64, peak30SecondsAgoC: 64 }), output());
+  for (const cause of ['battery_zone_anomaly', 'undetermined']) assert.throws(() => validateBayAIOutput({ ...output(), cause }, 'warning', eligibleEvidence()), { code: 'AI_OUTPUT_DOWNGRADE' });
+});
+
+test('production prompt includes all five conditions and leaves concentration to visual model judgment', () => {
+  const { alert, detail } = evidence(), prepared = prepareBayAIInput(detail, alert);
+  assert.ok(prepared.system.includes(BAY_AI_DOWNGRADE_INSTRUCTION));
+  for (const clause of ['(1)', '(2)', '(3)', '(4)', '(5)', 'judge from the image', 'small concentrated patch', 'not widespread', 'charging wheel hotspot']) assert.ok(prepared.system.includes(clause));
+  assert.equal(JSON.parse(prepared.text).hotspotRegionId, detail.hotspot.zone);
+});
+
+test('scheduler validates immutable sent evidence, even when the source history later becomes eligible', async () => {
+  const { alert, detail } = evidence(); let resolve;
+  const ai = createBayAI({ provider: { configured: true, complete: () => new Promise(done => { resolve = done; }) }, timeoutMs: 1000 });
+  try {
+    ai.reset('session', true); ai.trigger(alert, detail); await flush();
+    detail.history.push({ capturedAt: '2026-10-09T00:00:20Z', peakC: 65 }, { capturedAt: '2026-10-09T00:00:00Z', peakC: 68 });
+    detail.hotspot.zone = 'wheel'; resolve({ json: output(), model: 'test-fixture' }); await flush();
+    assert.equal(ai.latest(alert.id).status, 'unavailable'); assert.equal(ai.latest(alert.id).errorCode, 'AI_OUTPUT_DOWNGRADE_RULE'); assert.equal(ai.latest(alert.id).output, null);
+  } finally { ai.close(); }
 });
 
 test('adapter sends image + strict JSON schema and falls back only for an explicitly unsupported format', async () => {

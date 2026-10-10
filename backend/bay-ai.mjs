@@ -42,7 +42,7 @@ export function createBayAI({ provider, now = Date.now, clock = () => performanc
         if (clock() - job.createdMono >= timeoutMs) throw new BayAIError('AI_TIMEOUT');
         job.run.model = typeof result.model === 'string' ? result.model.slice(0, 120) : 'unknown';
         job.run.rejectedOutput = result.json;
-        job.run.output = validateBayAIOutput(result.json, job.run.levelAtRequest);
+        job.run.output = validateBayAIOutput(result.json, job.run.levelAtRequest, JSON.parse(job.input.text));
         delete job.run.rejectedOutput;
         job.run.status = 'available'; job.run.ok = true; job.run.errorCode = null;
         job.run.latencyMs = Math.max(0, clock() - job.createdMono); publish(job);
