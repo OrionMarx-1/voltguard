@@ -98,8 +98,8 @@ test('a failed decision persistence callback leaves in-memory alert and next dow
 });
 
 test('queue groups pending before handled alerts, with danger then age within each group', () => {
-  const f = fixture(); f.send(80, 0); f.decide(); f.send(60, 1, false, 'B2-08'); f.send(80, 2, false, 'B2-07');
-  assert.deepEqual(f.monitor.alerts().map(alert => [alert.bayId, alert.status]), [['B2-07', 'pending'], ['B2-08', 'pending'], ['B2-02', 'processing']]);
+  const f = fixture(); f.send(80, 0); f.decide(); f.send(60, 1, false, 'B2-03'); f.send(80, 2, false, 'B2-01');
+  assert.deepEqual(f.monitor.alerts().map(alert => [alert.bayId, alert.status]), [['B2-01', 'pending'], ['B2-03', 'pending'], ['B2-02', 'processing']]);
 });
 
 test('HTTP decisions enforce CSRF/conflicts, append isolated persisted snapshots, publish compact WS, and reset cascades all records', async () => {
@@ -126,12 +126,12 @@ test('HTTP decisions enforce CSRF/conflicts, append isolated persisted snapshots
     assert.equal(db.prepare('SELECT COUNT(*) AS n FROM bay_decisions').get().n, 0);
     db.exec('DROP TRIGGER fail_decision');
     for (const level of ['downgrade', 'maintain', 'escalate']) {
-      clock += 1000; app.carpark.tick(); const current = app.carpark.detail('B2-08').frame;
+      clock += 1000; app.carpark.tick(); const current = app.carpark.detail('B2-03').frame;
       const response = await post(route, choice(level, ['dispatch_patrol'])); assert.equal(response.status, 201);
       const saved = await response.json(); assert.deepEqual(saved.decision.frame, current); assert.equal(saved.decision.frameSeq, current.seq);
     }
     assert.equal((await post(route, choice('downgrade'))).status, 409);
-    const details = await (await fetch(base + '/api/bays/B2-08')).json(); assert.equal(details.decisions.length, 3);
+    const details = await (await fetch(base + '/api/bays/B2-03')).json(); assert.equal(details.decisions.length, 3);
     assert.deepEqual(details.decisions.map(row => row.level), ['downgrade', 'maintain', 'escalate']);
     assert.equal(db.prepare('SELECT COUNT(*) AS n FROM bay_decisions').get().n, 3);
     for (const table of ['telemetry', 'events', 'audit']) assert.equal(db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get().n, 0);
@@ -142,6 +142,6 @@ test('HTTP decisions enforce CSRF/conflicts, append isolated persisted snapshots
     await post('/api/demo/reset', {}); assert.equal(db.prepare('SELECT COUNT(*) AS n FROM bay_decisions').get().n, 0);
     assert.equal(db.prepare('SELECT COUNT(*) AS n FROM bay_alerts').get().n, 0);
     assert.equal((await post(route, choice())).status, 409);
-    assert.deepEqual(app.carpark.detail('B2-08').decisions, []);
+    assert.deepEqual(app.carpark.detail('B2-03').decisions, []);
   } finally { socket.close(); db.close(); await app.close(); }
 });

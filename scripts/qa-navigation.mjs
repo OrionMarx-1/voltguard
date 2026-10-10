@@ -15,7 +15,7 @@ const context = await browser.newContext({ viewport: { width: 1440, height: 1000
 const page = await context.newPage(), errors = [];
 page.on('pageerror', error => errors.push(error.message));
 async function carpark(p = page) {
-  await p.locator('#carparkView').waitFor(); await p.locator('.cp-bay').nth(11).waitFor();
+  await p.locator('#carparkView').waitFor(); await p.locator('.cp-bay').nth(5).waitFor();
   assert.equal(await p.locator('#carparkTab').getAttribute('aria-current'), 'page');
   assert.equal(await p.locator('#nasaNav').isVisible(), false);
 }
@@ -28,7 +28,7 @@ try {
   assert.equal(await page.locator('#rulesTab').innerText(), 'Rule validation (NASA cells)');
   assert.match(await page.locator('#contextValue').innerText(), /Simulation/);
   await shot('home-en-desktop.png');
-  await page.locator('#cpScenarioA').click(); await page.locator('.cp-bay[data-bay="B2-08"][data-status="warning"]').waitFor();
+  await page.locator('#cpScenarioA').click(); await page.locator('.cp-bay[data-bay="B2-03"][data-status="warning"]').waitFor();
   const session = app.carpark.snapshot().session.id;
   await page.locator('#rulesTab').click(); await page.locator('#fleetRows .fleet-row').first().waitFor();
   assert.equal(await page.locator('#rulesTab').getAttribute('aria-current'), 'page');

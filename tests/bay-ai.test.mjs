@@ -15,8 +15,8 @@ const eligibleEvidence = () => ({ alertLevel: 'warning', hotspotRegionId: 'wheel
 const flush = () => new Promise(setImmediate), sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 function evidence() {
   const monitor = createBayMonitor({ now: () => Date.parse('2026-10-09T00:00:30Z') }); monitor.reset('session');
-  monitor.ingestSimulation({ schemaVersion: 'voltguard-frame-1', bayId: 'B2-08', seq: 31, capturedAt: '2026-10-09T00:00:30Z', temperaturesC: Array.from({ length: 24 }, () => Array(32).fill(60)) });
-  return { alert: monitor.alerts()[0], detail: monitor.detail('B2-08') };
+  monitor.ingestSimulation({ schemaVersion: 'voltguard-frame-1', bayId: 'B2-03', seq: 31, capturedAt: '2026-10-09T00:00:30Z', temperaturesC: Array.from({ length: 24 }, () => Array(32).fill(60)) });
+  return { alert: monitor.alerts()[0], detail: monitor.detail('B2-03') };
 }
 const response = json => new Response(JSON.stringify({ choices: [{ finish_reason: 'stop', message: { content: JSON.stringify(json) } }] }), { status: 200 });
 const input = () => ({ system: 'Return JSON.', text: '{}', imagePng: bayFrameImage(evidence().detail.frame.temperaturesC), schema: BAY_AI_SCHEMA, timeoutMs: 100 });

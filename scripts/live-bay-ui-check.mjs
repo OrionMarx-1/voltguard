@@ -76,8 +76,8 @@ try {
   assert.equal(app.carpark.snapshot().session.aiMode, 'provider');
   assert.equal(await page.locator('#cpAiToggle').isEnabled(), true);
   await page.locator('#cpOperator').fill('LIVE-CHECK');
-  await page.locator('#cpAiToggle').check(); await page.locator('#cpScenarioA').click(); await bay('B2-08').click();
-  await result('B2-08', 'A-warning');
+  await page.locator('#cpAiToggle').check(); await page.locator('#cpScenarioA').click(); await bay('B2-03').click();
+  await result('B2-03', 'A-warning');
   await page.locator('#cpLevelmaintain').check(); await page.locator('#cpDecisionSubmit').click();
   await page.waitForFunction(() => document.querySelector('#cpDecisionCount').textContent === '1');
   check = 'B-warning';

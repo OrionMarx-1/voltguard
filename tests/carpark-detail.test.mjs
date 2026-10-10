@@ -12,9 +12,9 @@ test('viewing duration follows opening a bay/session, survives frame updates, an
   let now = 10; const clock = createViewingClock(() => now);
   clock.open('session/B2-02'); assert.equal(clock.elapsed(), 0);
   now = 1010; clock.open('session/B2-02'); assert.equal(clock.elapsed(), 1000);
-  clock.open('session/B2-08'); now = 2010; assert.equal(clock.elapsed(), 1000);
-  clock.reset(); clock.open('session/B2-08'); now = 2110; assert.equal(clock.elapsed(), 100);
-  clock.open('new-session/B2-08'); assert.equal(clock.elapsed(), 0);
+  clock.open('session/B2-03'); now = 2010; assert.equal(clock.elapsed(), 1000);
+  clock.reset(); clock.open('session/B2-03'); now = 2110; assert.equal(clock.elapsed(), 100);
+  clock.open('new-session/B2-03'); assert.equal(clock.elapsed(), 0);
 });
 const target = (seq = 1, bayId = 'B2-02', sessionId = 'session-1') => ({ seq, bayId, sessionId });
 const detail = ({ seq, bayId, sessionId }) => ({ bay: { id: bayId }, session: { id: sessionId }, sourceType: 'simulation', exportable: false, frame: seq === null ? null : { seq, bayId, sourceType: 'simulation' } });
@@ -46,18 +46,18 @@ test('decision revisions refresh details without a new temperature frame, and a 
 
 test('late replies cannot overwrite another selected bay or a new reset session, even if abort is ignored', async () => {
   const { loader, calls } = deferredLoader();
-  loader.update(target()); await settle(); loader.update(target(1, 'B2-08')); await settle();
+  loader.update(target()); await settle(); loader.update(target(1, 'B2-03')); await settle();
   assert.equal(calls[0].signal.aborted, true); assert.equal(loader.state.detail, null);
-  calls[1].resolve(detail(target(1, 'B2-08'))); await settle();
-  calls[0].resolve(detail(target())); await settle(); assert.equal(loader.state.detail.bay.id, 'B2-08');
-  loader.update(target(1, 'B2-08', 'session-2')); await settle(); assert.equal(loader.state.detail, null);
-  calls[2].resolve(detail(target(1, 'B2-08', 'session-2'))); await settle();
+  calls[1].resolve(detail(target(1, 'B2-03'))); await settle();
+  calls[0].resolve(detail(target())); await settle(); assert.equal(loader.state.detail.bay.id, 'B2-03');
+  loader.update(target(1, 'B2-03', 'session-2')); await settle(); assert.equal(loader.state.detail, null);
+  calls[2].resolve(detail(target(1, 'B2-03', 'session-2'))); await settle();
   assert.equal(loader.state.detail.session.id, 'session-2');
-  loader.update(target(2, 'B2-08', 'session-2')); await settle();
-  loader.update(target(1, 'B2-08', 'session-3')); await settle();
+  loader.update(target(2, 'B2-03', 'session-2')); await settle();
+  loader.update(target(1, 'B2-03', 'session-3')); await settle();
   assert.equal(calls[3].signal.aborted, true);
-  calls[4].resolve(detail(target(1, 'B2-08', 'session-3'))); await settle();
-  calls[3].resolve(detail(target(2, 'B2-08', 'session-2'))); await settle();
+  calls[4].resolve(detail(target(1, 'B2-03', 'session-3'))); await settle();
+  calls[3].resolve(detail(target(2, 'B2-03', 'session-2'))); await settle();
   assert.equal(loader.state.detail.session.id, 'session-3'); assert.equal(loader.state.detail.frame.seq, 1);
   loader.close(); assert.equal(loader.state.detail, null);
 });
@@ -73,13 +73,13 @@ test('read failure retains the last valid frame, avoids a retry loop, and suppor
 });
 
 test('wrong bay/session/source, exportable frames and outdated HTTP replies are rejected', async () => {
-  for (const bad of [detail(target(1)), detail(target(2, 'B2-08')), detail(target(2, 'B2-02', 'old-session')), { ...detail(target(2)), sourceType: 'measured' }, { ...detail(target(2)), exportable: true }, detail(target(null))]) {
+  for (const bad of [detail(target(1)), detail(target(2, 'B2-03')), detail(target(2, 'B2-02', 'old-session')), { ...detail(target(2)), sourceType: 'measured' }, { ...detail(target(2)), exportable: true }, detail(target(null))]) {
     const { loader, calls } = deferredLoader(); loader.update(target(2)); await settle(); calls[0].resolve(bad); await settle();
     assert.equal(loader.state.error, true); assert.equal(loader.state.detail, null); assert.equal(calls.length, 1);
   }
-  const { loader, calls } = deferredLoader(); loader.update(target(null, 'B2-11')); await settle();
-  calls[0].resolve(detail(target(null, 'B2-11'))); await settle(); assert.equal(loader.state.error, false);
-  loader.update(target(null, 'B2-11')); await settle(); assert.equal(calls.length, 1);
+  const { loader, calls } = deferredLoader(); loader.update(target(null, 'B2-06')); await settle();
+  calls[0].resolve(detail(target(null, 'B2-06'))); await settle(); assert.equal(loader.state.error, false);
+  loader.update(target(null, 'B2-06')); await settle(); assert.equal(calls.length, 1);
 });
 
 test('thermal renderer paints all 768 pixels with the shared fixed palette, hatches null, and outlines configured regions', () => {

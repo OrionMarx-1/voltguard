@@ -19,17 +19,17 @@ async function fixture(databasePath = ':memory:', overrides = {}) {
   };
 }
 
-test('carpark APIs expose twelve bays, one permanently missing feed, compact summaries and isolated simulation details', async () => {
+test('carpark APIs expose six bays, one permanently missing feed, compact summaries and isolated simulation details', async () => {
   const f = await fixture();
   try {
     const initial = await f.get('/api/carpark');
-    assert.equal(initial.bays.length, 12); assert.equal(initial.layout.bays.length, 12);
+    assert.equal(initial.bays.length, 6); assert.equal(initial.layout.bays.length, 6);
     assert.equal(initial.session.sourceType, 'simulation'); assert.equal(initial.session.exportable, false);
-    assert.ok(initial.bays.filter(bay => bay.id !== 'B2-11').every(bay => bay.connecting));
+    assert.ok(initial.bays.filter(bay => bay.id !== 'B2-06').every(bay => bay.connecting));
     f.tick();
     const state = await f.get('/api/carpark');
-    assert.equal(state.bays.filter(bay => bay.status === 'normal').length, 11);
-    assert.deepEqual(state.bays.filter(bay => bay.noData).map(bay => bay.id), ['B2-11']);
+    assert.equal(state.bays.filter(bay => bay.status === 'normal').length, 5);
+    assert.deepEqual(state.bays.filter(bay => bay.noData).map(bay => bay.id), ['B2-06']);
     assert.equal(JSON.stringify(state.bays).includes('temperaturesC'), false);
     const detail = await f.get('/api/bays/B2-02');
     assert.equal(detail.frame.temperaturesC.length, 24); assert.equal(detail.frame.temperaturesC[0].length, 32);
@@ -64,12 +64,13 @@ test('scenario startup clears baseline rate history, A stays warning and B cross
   try {
     f.tick();
     let response = await f.post('/api/demo/scenario', { name: 'A', ai: false }); assert.equal(response.status, 200);
-    let detail = await f.get('/api/bays/B2-08');
+    let detail = await f.get('/api/bays/B2-03');
     assert.equal(detail.summary.status, 'warning'); assert.equal(detail.assessment.riseCPerS, null);
     assert.equal(detail.hotspot.zone, 'wheel'); assert.equal(detail.history.length, 1);
+    assert.equal(detail.bay.charging, true); assert.equal(detail.summary.occupied, true); assert.equal(detail.summary.isCharging, false);
     assert.equal(detail.ai.errorCode, 'AI_DISABLED'); assert.equal(detail.session.aiRequested, false);
     for (let t = 1; t <= 60; t++) {
-      f.tick(); assert.equal(f.app.carpark.detail('B2-08').summary.status, 'warning', `A second ${t}`);
+      f.tick(); assert.equal(f.app.carpark.detail('B2-03').summary.status, 'warning', `A second ${t}`);
       // Let HTTP keep-alive timers/socket close events run during the virtual replay.
       // Blocking for a full minute's computation can otherwise reuse an expired socket.
       await new Promise(setImmediate);
@@ -115,10 +116,10 @@ test('sessions and alerts persist in separate tables, reset cascades demo rows, 
     assert.equal(count('bay_alerts'), 0); assert.equal(count('demo_sessions'), 1);
     assert.equal(inspection.prepare('SELECT id FROM demo_sessions WHERE id=?').get(sessionId), undefined);
     assert.equal((await f.get('/api/alerts')).alerts.length, 0);
-    assert.equal((await f.get('/api/bays/B2-08')).summary.occupied, false);
-    assert.equal((await f.get('/api/bays/B2-08')).history.length, 1);
+    assert.equal((await f.get('/api/bays/B2-03')).summary.occupied, false);
+    assert.equal((await f.get('/api/bays/B2-03')).history.length, 1);
     assert.deepEqual(['telemetry', 'events', 'audit'].map(count), original);
-    f.tick(); assert.equal((await f.get('/api/carpark')).bays.filter(bay => bay.status === 'normal').length, 11);
+    f.tick(); assert.equal((await f.get('/api/carpark')).bays.filter(bay => bay.status === 'normal').length, 5);
   } finally { inspection.close(); await f.app.close(); }
 });
 
@@ -144,7 +145,7 @@ test('WS publishes a complete compact bay batch within one second, sends alert c
     await waitFor('connected');
     const start = performance.now(); f.tick(); const batch = await waitFor('bays');
     assert.ok(performance.now() - start < 1000);
-    assert.equal(batch.report.bays.length, 12); assert.equal(batch.report.sourceType, 'simulation');
+    assert.equal(batch.report.bays.length, 6); assert.equal(batch.report.sourceType, 'simulation');
     assert.equal(batch.report.exportable, false); assert.ok(Buffer.byteLength(JSON.stringify(batch)) < 8192);
     assert.equal(JSON.stringify(batch).includes('temperaturesC'), false);
     await f.post('/api/demo/scenario', { name: 'B', ai: false });
@@ -163,7 +164,7 @@ test('real timer advances the startup demonstration without manual ticks and is 
   try {
     await new Promise(resolve => setTimeout(resolve, 1100));
     const state = await f.get('/api/carpark');
-    assert.equal(state.bays.filter(bay => bay.status === 'normal').length, 11);
-    assert.equal(state.bays.find(bay => bay.id === 'B2-11').status, 'no_data');
+    assert.equal(state.bays.filter(bay => bay.status === 'normal').length, 5);
+    assert.equal(state.bays.find(bay => bay.id === 'B2-06').status, 'no_data');
   } finally { await f.app.close(); }
 });

@@ -25,10 +25,10 @@ try {
   });
   clock += 1000; app.carpark.tick();
   const initial = await get('/api/carpark');
-  assert.equal(initial.bays.filter(bay => bay.status === 'normal').length, 11);
-  assert.deepEqual(initial.bays.filter(bay => bay.noData).map(bay => bay.id), ['B2-11']);
+  assert.equal(initial.bays.filter(bay => bay.status === 'normal').length, 5);
+  assert.deepEqual(initial.bays.filter(bay => bay.noData).map(bay => bay.id), ['B2-06']);
   const results = {};
-  for (const [name, bayId, seconds] of [['A', 'B2-08', [0, 1, 28, 42, 60]], ['B', 'B2-02', [0, 1, 27, 28, 41, 42, 46, 50]]]) {
+  for (const [name, bayId, seconds] of [['A', 'B2-03', [0, 1, 28, 42, 60]], ['B', 'B2-02', [0, 1, 27, 28, 41, 42, 46, 50]]]) {
     await post('/api/demo/scenario', { name, ai: false });
     const startedAt = clock, rows = [];
     for (const second of seconds) {
@@ -46,5 +46,5 @@ try {
   assert.equal((await get('/api/events')).events.length, 0); assert.equal((await get('/api/fleet')).records.length, 0);
   const batches = messages.filter(message => message.type === 'bays');
   assert.ok(batches.length > 0); assert.equal(JSON.stringify(batches).includes('temperaturesC'), false);
-  console.log(JSON.stringify({ ok: true, sourceType: 'simulation', clock: 'injected; key seconds only', aiCalls: 0, noDataBays: ['B2-11'], scenarios: results, resetClearedAlerts: true, measuredRecords: 0, websocketBatches: batches.length, websocketHasMatrices: false }, null, 2));
+  console.log(JSON.stringify({ ok: true, sourceType: 'simulation', clock: 'injected; key seconds only', aiCalls: 0, noDataBays: ['B2-06'], scenarios: results, resetClearedAlerts: true, measuredRecords: 0, websocketBatches: batches.length, websocketHasMatrices: false }, null, 2));
 } finally { socket?.close(); await app.close(); }

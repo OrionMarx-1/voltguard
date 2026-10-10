@@ -4,17 +4,17 @@ import { ValidationError } from '../../dist/safety.mjs';
 // Every value in this module is synthetic, not a physical model or a measurement.
 // These pure functions do not write telemetry, events, reports or AI results.
 export const SCENARIOS = Object.freeze({
-  A: Object.freeze({ name: 'A', sourceType: 'simulation', bayId: 'B2-08', durationSeconds: 60, hotspot: Object.freeze({ row: 19, col: 5 }) }),
+  A: Object.freeze({ name: 'A', sourceType: 'simulation', bayId: 'B2-03', durationSeconds: 60, hotspot: Object.freeze({ row: 19, col: 5 }) }),
   B: Object.freeze({ name: 'B', sourceType: 'simulation', bayId: 'B2-02', durationSeconds: 50, hotspot: Object.freeze({ row: 21, col: 15 }) })
 });
 
-const occupied = new Set(['B2-01', 'B2-02', 'B2-04', 'B2-05', 'B2-06', 'B2-07', 'B2-10']);
+const occupied = new Set(['B2-01', 'B2-02', 'B2-04', 'B2-05']);
 const charging = new Set(['B2-01', 'B2-02', 'B2-04', 'B2-05']);
 export const DEMO_BAYS = Object.freeze(CARPARK_LAYOUT.bays.map(bay => Object.freeze({
   bayId: bay.id,
   occupied: occupied.has(bay.id),
   isCharging: charging.has(bay.id),
-  emitsFrames: bay.id !== 'B2-11',
+  emitsFrames: bay.id !== 'B2-06',
   sourceType: 'simulation'
 })));
 

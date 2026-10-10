@@ -4,16 +4,16 @@ import { CARPARK_LAYOUT, zoneAt, zoneLabels, hotspotRegion } from '../dist/carpa
 
 const grid = value => Array.from({ length: 24 }, () => Array(32).fill(value));
 
-test('B2 configuration has twelve distinct bays, two rows, and six charging bays', () => {
+test('B2 configuration has six distinct bays, one row, and six charging bays', () => {
   assert.equal(CARPARK_LAYOUT.schemaVersion, 'voltguard-carpark-1');
   assert.equal(CARPARK_LAYOUT.floor, 'B2');
   assert.deepEqual(CARPARK_LAYOUT.frame, { rows: 24, cols: 32 });
-  assert.deepEqual(CARPARK_LAYOUT.bays.map(bay => bay.id), Array.from({ length: 12 }, (_, i) => `B2-${String(i + 1).padStart(2, '0')}`));
-  assert.equal(new Set(CARPARK_LAYOUT.bays.map(bay => `${bay.row}:${bay.col}`)).size, 12);
+  assert.deepEqual(CARPARK_LAYOUT.bays.map(bay => bay.id), Array.from({ length: 6 }, (_, i) => `B2-${String(i + 1).padStart(2, '0')}`));
+  assert.equal(new Set(CARPARK_LAYOUT.bays.map(bay => `${bay.row}:${bay.col}`)).size, 6);
   for (const [index, bay] of CARPARK_LAYOUT.bays.entries()) {
-    assert.equal(bay.row, Math.floor(index / 6));
+    assert.equal(bay.row, 0);
     assert.equal(bay.col, index % 6);
-    assert.equal(bay.charging, index < 6);
+    assert.equal(bay.charging, true);
     assert.equal(bay.endFacingCamera, 'front');
   }
   assert.ok(Object.isFrozen(CARPARK_LAYOUT.zones[0].rects[0].rows));

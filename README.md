@@ -14,15 +14,15 @@ $node = 'C:\Users\Admin1\AppData\Local\Programs\nodejs-v24.13.0\node.exe'
 
 Open **http://127.0.0.1:4173** in a browser. Do not double-click `dist/index.html`: browser restrictions on local-file modules and JSON requests prevent the complete application from working through `file://`.
 
-The local homepage shows twelve B2 bays, six charging bays, thermal detail, alerts and operator decisions. The private ignored `.env` is loaded automatically at startup; explicit process environment variables take precedence. No key is required for rule-only demonstrations.
+The local homepage shows six B2 charging bays in one row, thermal detail, alerts and operator decisions. The private ignored `.env` is loaded automatically at startup; explicit process environment variables take precedence. No key is required for rule-only demonstrations.
 
 The public static site's carpark homepage says **Run the local service** and disables scenario controls; it does not fabricate temperature frames or AI results. The secondary NASA workspace still provides historical measurements, JSON import, sensor inspection, voice guidance, report export and printing. Public imports stay in browser-session memory. Local mode adds independent simulation SQLite tables, measured-record storage, event transitions, the authorized telemetry API and WS updates. No cloud database is connected.
 
 ## Demonstrate the carpark MVP
 
 1. Open the homepage, enter an operator code, and leave **AI explanation** off for a rule-only comparison. An operator code is not an authenticated identity.
-2. Start **Scenario A**, select **B2-08**: wheel-region residual heat cools from 68°C to 62°C while the warning remains. Choose a level and explicitly submit the decision; manual downgrade means observation, not a claim of safety.
-3. Start **Scenario B**, select **B2-02**: underbody heat reaches warning at second 28 and danger at second 42. A danger alert cannot be downgraded. The separate **B2-11** bay always has no data.
+2. Start **Scenario A**, select **B2-03**: a newly arrived vehicle has not started charging; wheel-region residual heat cools from 68°C to 62°C while the warning remains. Choose a level and explicitly submit the decision; manual downgrade means observation, not a claim of safety.
+3. Start **Scenario B**, select **B2-02**: underbody heat reaches warning at second 28 and danger at second 42. A danger alert cannot be downgraded. The separate **B2-06** bay always has no data.
 4. To use real AI, configure `VOLTGUARD_AI_ENABLED=true`, `VOLTGUARD_AI_BASE_URL`, `VOLTGUARD_AI_MODEL` and `VOLTGUARD_AI_API_KEY` in `.env`, then restart the service and enable the scenario's AI checkbox. Keys stay server-side. New, escalated or reopened alerts trigger calls; merely opening the homepage or switching languages does not.
 5. AI suggestions prefill controls and require explicit submission. Refusal, invalid output or the nine-second server deadline leaves the manual path available. **Reset** clears the current simulation session, its AI runs and decisions. No carpark simulation is exportable or enters NASA measured records.
 

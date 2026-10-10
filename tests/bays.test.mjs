@@ -42,12 +42,12 @@ test('a first warning/danger frame alerts immediately without needing a rise rat
 test('demo occupancy follows the scenario configuration instead of inferring a vehicle from an alert', () => {
   const f = fixture();
   f.monitor.reset('scenario-A-session', { scenario: 'A' });
-  f.send(30, 0, 'B2-08');
-  assert.equal(f.monitor.detail('B2-08').summary.occupied, true);
+  f.send(30, 0, 'B2-03');
+  assert.equal(f.monitor.detail('B2-03').summary.occupied, true);
   assert.equal(f.monitor.alerts().length, 0);
   f.monitor.reset('baseline-session');
-  f.send(60, 1, 'B2-08');
-  assert.equal(f.monitor.detail('B2-08').summary.occupied, false);
+  f.send(60, 1, 'B2-03');
+  assert.equal(f.monitor.detail('B2-03').summary.occupied, false);
 });
 
 test('warning coalesces into one alert, upgrades once to danger, and never falls with cooling or disconnection', () => {
@@ -67,15 +67,15 @@ test('warning coalesces into one alert, upgrades once to danger, and never falls
 
 test('unhandled alerts survive more than ten normal seconds, show recovery, and sort by severity then creation time', () => {
   const f = fixture();
-  f.send(60, 0, 'B2-08');
-  f.send(60, 1, 'B2-07');
+  f.send(60, 0, 'B2-03');
+  f.send(60, 1, 'B2-01');
   f.send(80, 2, 'B2-02');
-  for (let t = 3; t <= 15; t++) f.send(30, t, 'B2-08');
+  for (let t = 3; t <= 15; t++) f.send(30, t, 'B2-03');
   const alerts = f.monitor.alerts();
-  assert.deepEqual(alerts.map(alert => alert.bayId), ['B2-02', 'B2-08', 'B2-07']);
+  assert.deepEqual(alerts.map(alert => alert.bayId), ['B2-02', 'B2-03', 'B2-01']);
   assert.equal(alerts[1].recovered, true);
   assert.equal(alerts[1].status, 'pending');
-  assert.equal(f.monitor.detail('B2-08').summary.status, 'warning');
+  assert.equal(f.monitor.detail('B2-03').summary.status, 'warning');
   f.at(21000); assert.equal(f.monitor.alerts()[1].recovered, false);
 });
 

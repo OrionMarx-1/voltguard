@@ -9,7 +9,7 @@ const bridge = window.voltguard, $ = id => document.getElementById(id);
 const words = {
   zh: {
     tab: '車位監控', kicker: '控制室 · 停車場早期預警', title: '先看見異常，再決定下一步。',
-    intro: 'B2 層 · 12 個車位 · 6 個充電位', simulation: '仿真演示', compressed: '演示時間已壓縮',
+    intro: 'B2 層 · 6 個充電位', simulation: '仿真演示', compressed: '演示時間已壓縮',
     limit: '合成溫度幀，非實測或物理模型結果；不進入實測記錄或匯出。',
     live: '本機服務已連線', loading: '正在連接本機服務', offline: '連線中斷 · 保留已知告警',
     serviceRequired: '需運行本地服務', serviceNote: '車位演示需要本機 VoltGuard 服務。NASA 實測頁面仍可使用。',
@@ -38,7 +38,7 @@ const words = {
   },
   en: {
     tab: 'Bay monitor', kicker: 'CONTROL ROOM · EARLY WARNING', title: 'Spot the change. Decide the next step.',
-    intro: 'Level B2 · 12 bays · 6 charging bays', simulation: 'Simulation demo', compressed: 'Demo time is compressed',
+    intro: 'Level B2 · 6 charging bays', simulation: 'Simulation demo', compressed: 'Demo time is compressed',
     limit: 'Synthetic temperature frames, not measurements or a physical model. Excluded from measured records and exports.',
     live: 'Local service connected', loading: 'Connecting to local service', offline: 'Connection lost · Known alerts retained',
     serviceRequired: 'Run the local service', serviceNote: 'The bay demo needs the local VoltGuard service. NASA measured-data pages remain available.',
@@ -80,7 +80,7 @@ view.innerHTML = `
       <section class="cp-map-panel" aria-labelledby="cpMapTitle">
         <div class="cp-panel-head"><div><p class="cp-eyebrow">FLOOR / B2</p><h2 id="cpMapTitle" data-cp="map"></h2><p data-cp="mapNote"></p></div><div class="cp-floor-mark" aria-hidden="true">B2</div></div>
         <div id="cpCounts" class="cp-counts"></div>
-        <div class="cp-floor"><div class="cp-row-label" data-cp="chargingRow"></div><div id="cpBayGrid" class="cp-bay-grid"></div><div class="cp-row-label cp-bottom-label" data-cp="standardRow"></div></div>
+        <div class="cp-floor"><div class="cp-row-label" data-cp="chargingRow"></div><div id="cpBayGrid" class="cp-bay-grid"></div></div>
         <div class="cp-map-foot"><span data-cp="selectHint"></span><span>32 × 24 · 1 Hz</span></div>
       </section>
       <section class="cp-controls" aria-labelledby="cpControlsTitle"><div class="cp-controls-heading"><div><h2 id="cpControlsTitle" data-cp="controls"></h2><p data-cp="controlsNote"></p></div><span id="cpScenario" class="cp-scenario-label"></span></div><div class="cp-control-actions"><button id="cpScenarioA" class="cp-scenario-button" type="button" aria-pressed="false"><span class="cp-scenario-letter">A</span><span><strong data-cp="sceneA"></strong><small data-cp="sceneADesc"></small></span></button><button id="cpScenarioB" class="cp-scenario-button" type="button" aria-pressed="false"><span class="cp-scenario-letter">B</span><span><strong data-cp="sceneB"></strong><small data-cp="sceneBDesc"></small></span></button><button id="cpReset" class="cp-button cp-reset" type="button"><span aria-hidden="true">↺</span><span data-cp="reset"></span></button></div><div class="cp-ai-control"><label><input id="cpAiToggle" type="checkbox" disabled><span data-cp="ai"></span></label><span data-cp="aiNote"></span></div></section>
@@ -118,7 +118,7 @@ const bayElements = new Map();
 for (const bay of CARPARK_LAYOUT.bays) {
   const button = document.createElement('button');
   button.type = 'button'; button.className = 'cp-bay'; button.dataset.bay = bay.id;
-  button.style.gridColumn = String(bay.col + 1); button.style.gridRow = String(bay.row === 0 ? 1 : 3);
+  button.style.gridColumn = String(bay.col + 1); button.style.gridRow = String(bay.row + 1);
   button.innerHTML = `<span class="cp-bay-top"><strong>${bay.id}</strong><span class="cp-charger-icon" aria-hidden="true">${bay.charging ? 'ϟ' : ''}</span></span><span class="cp-bay-state"><span class="cp-state-icon" aria-hidden="true"></span><span class="cp-state-text"></span></span><span class="cp-bay-vehicle">${vehicleSvg}<span class="cp-empty-icon" aria-hidden="true">P</span></span><span class="cp-bay-temperature"></span><span class="cp-bay-occupancy"></span><span class="cp-bay-missing"></span>`;
   button.addEventListener('click', () => selectBay(bay.id));
   button.addEventListener('keydown', event => {

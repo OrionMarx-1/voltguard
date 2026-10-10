@@ -4,23 +4,23 @@ import { createSimulationPlayer } from '../backend/sim/player.mjs';
 import { createBayMonitor } from '../backend/bays.mjs';
 
 const epoch = Date.parse('2026-10-09T00:00:00Z');
-test('injected clock emits exactly eleven frames per second, skips duplicates, resets scenario time, and holds the final frame', () => {
+test('injected clock emits exactly five frames per second, skips duplicates, resets scenario time, and holds the final frame', () => {
   let clock = epoch;
   const frames = [], ticks = [];
   const player = createSimulationPlayer({ now: () => clock, onFrame: frame => frames.push(frame), onTick: tick => ticks.push(tick) });
-  player.reset(); assert.equal(frames.length, 11);
-  assert.equal(frames.some(frame => frame.bayId === 'B2-11'), false);
+  player.reset(); assert.equal(frames.length, 5);
+  assert.equal(frames.some(frame => frame.bayId === 'B2-06'), false);
   assert.ok(frames.every(frame => frame.seq === 1 && frame.capturedAt === new Date(epoch).toISOString()));
-  assert.equal(player.tick(), false); assert.equal(frames.length, 11);
-  clock += 1000; player.tick(); assert.equal(frames.length, 22); assert.equal(ticks.at(-1).second, 1);
+  assert.equal(player.tick(), false); assert.equal(frames.length, 5);
+  clock += 1000; player.tick(); assert.equal(frames.length, 10); assert.equal(ticks.at(-1).second, 1);
   player.reset('A'); assert.equal(ticks.at(-1).second, 0);
   assert.equal(frames.at(-4).schemaVersion, 'voltguard-frame-1');
-  const firstA = frames.slice(-11).find(frame => frame.bayId === 'B2-08');
+  const firstA = frames.slice(-5).find(frame => frame.bayId === 'B2-03');
   assert.equal(firstA.temperaturesC[19][5], 68);
   clock += 60000; player.tick();
-  const lastA = frames.slice(-11).find(frame => frame.bayId === 'B2-08');
+  const lastA = frames.slice(-5).find(frame => frame.bayId === 'B2-03');
   clock += 10000; player.tick();
-  assert.deepEqual(frames.slice(-11).find(frame => frame.bayId === 'B2-08').temperaturesC, lastA.temperaturesC);
+  assert.deepEqual(frames.slice(-5).find(frame => frame.bayId === 'B2-03').temperaturesC, lastA.temperaturesC);
   assert.equal(lastA.temperaturesC[19][5], 62);
   assert.throws(() => player.reset('C'), /SIMULATION_SCENARIO/);
 });

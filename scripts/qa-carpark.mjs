@@ -47,16 +47,20 @@ try {
   await page.locator('#cpConnection[data-connected="true"]').waitFor();
   assert.equal(await page.locator('#carparkView').isVisible(), true);
   assert.equal(await page.locator('#thermalView').isVisible(), false);
-  assert.equal(await page.locator('.cp-bay').count(), 12);
+  assert.equal(await page.locator('.cp-bay').count(), 6);
+  assert.deepEqual(await page.locator('.cp-bay').evaluateAll(bays => bays.map(bay => bay.dataset.bay)), ['B2-01', 'B2-02', 'B2-03', 'B2-04', 'B2-05', 'B2-06']);
+  assert.equal(await page.locator('.cp-bay').evaluateAll(bays => new Set(bays.map(bay => bay.getBoundingClientRect().top)).size), 1);
+  assert.equal(app.carpark.snapshot().layout.bays.every(bay => bay.charging), true);
+  assert.equal(app.carpark.detail('B2-03').summary.occupied, false);
   assert.equal(await bay('B2-02').getAttribute('data-status'), 'no_data');
   assert.match(await bay('B2-02').innerText(), /Connecting/);
   await waitDetail('B2-02'); assert.equal(await page.locator('#cpRiseRate').innerText(), '—');
   assert.match(await page.locator('#cpRuleLevel').innerText(), /Insufficient data/);
   assert.equal(await page.locator('#cpNoRate').isVisible(), true);
   step(); await waitBay('B2-02', 'normal');
-  assert.equal(await page.locator('.cp-bay[data-status="normal"]').count(), 11);
-  assert.match(await bay('B2-11').innerText(), /No data/);
-  assert.match(await page.locator('#cpNoDataBays').innerText(), /B2-11/);
+  assert.equal(await page.locator('.cp-bay[data-status="normal"]').count(), 5);
+  assert.match(await bay('B2-06').innerText(), /No data/);
+  assert.match(await page.locator('#cpNoDataBays').innerText(), /B2-06/);
   assert.match(await page.locator('.cp-demo-banner').innerText(), /Simulation demo.*Demo time is compressed/s);
   assert.match(await page.locator('.verified').innerText(), /Simulation/);
   assert.equal(await page.locator('#cpAiToggle').isDisabled(), true);
@@ -67,23 +71,29 @@ try {
   await capture('carpark-baseline-en.png');
 
   await bay('B2-02').focus(); await page.keyboard.press('ArrowDown');
-  assert.equal(await bay('B2-08').evaluate(element => element === document.activeElement), true);
-  assert.equal(await page.locator('#cpSelectedId').innerText(), 'B2-08');
-  step(); await page.waitForFunction(() => document.querySelector('[data-bay="B2-08"]').dataset.frameSeq === '3');
-  assert.equal(await bay('B2-08').evaluate(element => element === document.activeElement), true);
+  assert.equal(await bay('B2-02').evaluate(element => element === document.activeElement), true);
+  assert.equal(await page.locator('#cpSelectedId').innerText(), 'B2-02');
+  await page.keyboard.press('ArrowRight');
+  assert.equal(await bay('B2-03').evaluate(element => element === document.activeElement), true);
+  assert.equal(await page.locator('#cpSelectedId').innerText(), 'B2-03');
+  step(); await page.waitForFunction(() => document.querySelector('[data-bay="B2-03"]').dataset.frameSeq === '3');
+  assert.equal(await bay('B2-03').evaluate(element => element === document.activeElement), true);
 
-  await page.locator('#cpScenarioA').click(); await waitBay('B2-08', 'warning');
+  await page.locator('#cpScenarioA').click(); await waitBay('B2-03', 'warning');
   step(); await waitBay('B2-02', 'normal');
-  await page.locator('.cp-alert-item').filter({ hasText: 'B2-08' }).waitFor();
-  await bay('B2-08').click(); assert.match(await page.locator('#cpSelectedStatus').innerText(), /Warning/);
+  await page.locator('.cp-alert-item').filter({ hasText: 'B2-03' }).waitFor();
+  await bay('B2-03').click(); assert.match(await page.locator('#cpSelectedStatus').innerText(), /Warning/);
+  assert.equal(app.carpark.detail('B2-03').summary.occupied, true);
+  assert.equal(app.carpark.detail('B2-03').summary.isCharging, false);
+  assert.match(await bay('B2-03').innerText(), /Not charging/);
   assert.equal(await page.locator('#cpScenarioA').getAttribute('aria-pressed'), 'true');
   assert.equal(app.carpark.snapshot().session.aiRequested, false);
-  await checkHotspot('B2-08', 'wheel'); assert.match(await page.locator('#cpHotspot').innerText(), /Front wheels/);
+  await checkHotspot('B2-03', 'wheel'); assert.match(await page.locator('#cpHotspot').innerText(), /Front wheels/);
   assert.equal(await page.locator('#cpRuleLevel').innerText(), 'Warning');
   assert.equal(await page.locator('#cpRiseRate').innerText(), '0.00 °C/s');
   assert.equal(await page.locator('#cpTrend').getAttribute('data-samples'), '2');
   await page.locator('#langButton').click();
-  assert.match(await page.locator('#carparkView').innerText(), /仿真演示/); assert.match(await bay('B2-08').innerText(), /警告/);
+  assert.match(await page.locator('#carparkView').innerText(), /仿真演示/); assert.match(await bay('B2-03').innerText(), /警告/);
   await capture('carpark-warning-zh.png');
 
   await page.locator('#cpScenarioB').click();
@@ -136,15 +146,15 @@ try {
   // Hold an actual HTTP reply, change selection, then release the old reply.
   let release, reached;
   const gate = new Promise(resolve => { release = resolve; }), reachedGate = new Promise(resolve => { reached = resolve; });
-  const delayed = app.carpark.detail('B2-08');
-  await page.route('**/api/bays/B2-08', async route => { reached(); await gate; await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(delayed) }).catch(() => {}); });
-  await bay('B2-08').click(); await reachedGate;
+  const delayed = app.carpark.detail('B2-03');
+  await page.route('**/api/bays/B2-03', async route => { reached(); await gate; await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(delayed) }).catch(() => {}); });
+  await bay('B2-03').click(); await reachedGate;
   assert.equal(await page.locator('#cpFrameContent').isVisible(), false);
   await bay('B2-02').click(); await waitDetail('B2-02'); release();
-  await page.unroute('**/api/bays/B2-08');
+  await page.unroute('**/api/bays/B2-03');
   assert.equal(await page.locator('#cpSelectedPanel').getAttribute('data-detail-bay'), 'B2-02');
   assert.equal(await page.locator('#cpThermalImage').getAttribute('data-region'), 'underbody');
-  await bay('B2-11').click(); await waitDetail('B2-11');
+  await bay('B2-06').click(); await waitDetail('B2-06');
   assert.equal(await page.locator('#cpFrameContent').isVisible(), false);
   assert.equal(await page.locator('#cpDetailEmpty').isVisible(), true);
   await bay('B2-02').click(); await waitDetail('B2-02');
@@ -192,7 +202,7 @@ try {
   assert.match(await publicPage.locator('#cpServiceNotice').innerText(), /Run the local service/);
   assert.equal(await publicPage.locator('#cpScenarioA').isDisabled(), true);
   assert.equal(await publicPage.locator('.cp-bay[data-status="normal"]').count(), 0);
-  assert.equal(await publicPage.locator('.cp-bay[data-status="no_data"]').count(), 12);
+  assert.equal(await publicPage.locator('.cp-bay[data-status="no_data"]').count(), 6);
   assert.equal(await publicPage.locator('#cpFrameContent').isVisible(), false);
   await overflow(publicPage);
   await capture('carpark-static-en-mobile.png', publicPage);
@@ -204,5 +214,5 @@ try {
   assert.equal((await (await fetch(base + '/api/events')).json()).events.length, 0);
   assert.equal((await (await fetch(base + '/api/fleet')).json()).records.length, 0);
   assert.deepEqual(errors, []);
-  console.log(JSON.stringify({ ok: true, twelveBays: true, deterministicAB: true, thermalPixelsAndHotspots: true, serverRuleAndRate: true, timestampedTrendGaps: true, detailFailureAndRetry: true, lateDetailIgnored: true, selectedBayOnly: true, reset: true, bilingual: true, keyboardAndFocus: true, disconnectRetainsDanger: true, staleSessionIgnored: true, failedWriteRetainsState: true, staticRequiresService: true, nasaPreserved: true, mobileOverflow: false, aiCalls: 0, pageErrors: errors, output }, null, 2));
+  console.log(JSON.stringify({ ok: true, sixChargingBaysInOneRow: true, deterministicAB: true, thermalPixelsAndHotspots: true, serverRuleAndRate: true, timestampedTrendGaps: true, detailFailureAndRetry: true, lateDetailIgnored: true, selectedBayOnly: true, reset: true, bilingual: true, keyboardAndFocus: true, disconnectRetainsDanger: true, staleSessionIgnored: true, failedWriteRetainsState: true, staticRequiresService: true, nasaPreserved: true, mobileOverflow: false, aiCalls: 0, pageErrors: errors, output }, null, 2));
 } finally { await browser.close(); await app.close(); }

@@ -28,7 +28,7 @@ const bay = id => page.locator(`.cp-bay[data-bay="${id}"]`);
 async function available() { await page.locator('#cpAiPanel[data-ai-status="available"]').waitFor(); await page.waitForFunction(() => !document.querySelector('#cpAiConfirm').disabled); }
 async function count(n) { await page.waitForFunction(n => document.querySelector('#cpDecisionCount').textContent === String(n), n); }
 async function capture(name) { await page.evaluate(() => { document.activeElement?.blur(); scrollTo(0, 0); }); await page.screenshot({ path: path.join(output, name), fullPage: true }); }
-async function startA() { await page.locator('#cpAiToggle').check(); await page.locator('#cpScenarioA').click(); await bay('B2-08').click(); }
+async function startA() { await page.locator('#cpAiToggle').check(); await page.locator('#cpScenarioA').click(); await bay('B2-03').click(); }
 try {
   await page.goto(base + '/?view=carpark&lang=en', { waitUntil: 'networkidle' });
   assert.equal(await page.locator('#cpAiToggle').isEnabled(), true); assert.equal(await page.locator('#cpAiToggle').isChecked(), true);
@@ -36,14 +36,14 @@ try {
   assert.match(await page.locator('#cpAiStub').innerText(), /TEST STUB.*Not a real model/);
   assert.match(await page.locator('#cpAiRecommendation').innerText(), /Maintain.*Wheel residual/);
   assert.match(await page.locator('#cpAiHotspot').innerText(), /Front wheels/);
-  const initialRun = app.carpark.detail('B2-08').ai, callsBeforeLanguage = calls;
+  const initialRun = app.carpark.detail('B2-03').ai, callsBeforeLanguage = calls;
   await page.locator('#langButton').click(); assert.match(await page.locator('#cpAiRationale').innerText(), /測試替身/);
   await page.locator('#langButton').click(); assert.equal(calls, callsBeforeLanguage);
   tick(2); await page.waitForFunction(() => !document.querySelector('#cpAiConfirm').disabled);
   await page.locator('#cpAiConfirm').click(); assert.equal(await page.locator('#cpLevelmaintain').isChecked(), true);
-  assert.equal(app.carpark.detail('B2-08').decisions.length, 0);
+  assert.equal(app.carpark.detail('B2-03').decisions.length, 0);
   await page.locator('#cpDecisionSubmit').click(); await count(1);
-  const saved = app.carpark.detail('B2-08').decisions[0];
+  const saved = app.carpark.detail('B2-03').decisions[0];
   assert.equal(saved.aiStance, 'confirmed'); assert.equal(saved.aiRunId, initialRun.id); assert.notEqual(saved.frameSeq, saved.aiRun.frameSeq);
   await page.locator('#cpDecisionHistory details').first().locator('summary').click();
   assert.equal(await page.locator('#cpDecisionHistory details').first().locator('canvas').count(), 2);
@@ -56,16 +56,16 @@ try {
   await page.locator('#cpAiReject').click(); assert.equal(await page.locator('#cpLevelmaintain').isChecked(), false);
   await page.locator('#cpDecisionSubmit').click(); assert.match(await page.locator('#cpDecisionFeedback').innerText(), /Choose a level/);
   await page.locator('#cpLevelmaintain').check(); await page.locator('#cpDecisionSubmit').click(); await count(2);
-  assert.equal(app.carpark.detail('B2-08').decisions[1].aiStance, 'rejected');
+  assert.equal(app.carpark.detail('B2-03').decisions[1].aiStance, 'rejected');
   await page.locator('#cpAiConfirm').click(); await page.locator('#cpLeveldowngrade').check(); await page.locator('#cpDecisionSubmit').click(); await count(3);
-  assert.equal(app.carpark.detail('B2-08').decisions[2].aiStance, 'rejected');
+  assert.equal(app.carpark.detail('B2-03').decisions[2].aiStance, 'rejected');
 
   await page.locator('#cpAiToggle').uncheck(); const disabledCalls = calls;
-  await page.locator('#cpScenarioA').click(); await bay('B2-08').click();
+  await page.locator('#cpScenarioA').click(); await bay('B2-03').click();
   await page.waitForFunction(() => document.querySelector('#cpAiUnavailable').textContent.includes('switched off'));
   assert.equal(calls, disabledCalls); assert.equal(await page.locator('#cpAiOutput').isVisible(), false);
   await page.locator('#cpLevelmaintain').check(); await page.locator('#cpDecisionSubmit').click(); await count(1);
-  assert.equal(app.carpark.detail('B2-08').decisions[0].aiUnavailable, true);
+  assert.equal(app.carpark.detail('B2-03').decisions[0].aiUnavailable, true);
 
   for (const failure of ['refusal', 'invalid', 'timeout']) {
     mode = failure; await startA();
@@ -76,7 +76,7 @@ try {
     await page.waitForFunction(() => document.querySelector('#cpAiPanel').dataset.aiStatus === 'unavailable' && /Model refused|validation|timed out/.test(document.querySelector('#cpAiUnavailable').textContent));
     assert.equal(await page.locator('#cpAiOutput').isVisible(), false); assert.equal(await page.locator('#cpAiConfirm').isDisabled(), true);
     await page.locator('#cpLevelmaintain').check(); await page.locator('#cpDecisionSubmit').click(); await count(1);
-    assert.equal(app.carpark.detail('B2-08').decisions[0].aiStance, 'none');
+    assert.equal(app.carpark.detail('B2-03').decisions[0].aiStance, 'none');
   }
   await capture('ai-unavailable-en.png');
   mode = 'success'; await page.locator('#cpScenarioB').click(); tick(28); await bay('B2-02').click(); await available();

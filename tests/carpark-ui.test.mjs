@@ -41,12 +41,12 @@ test('alert missing-data badges follow the latest bay summary without lowering t
   assert.equal(alert.noData, false);
 });
 
-test('arrow-key focus follows the physical two-by-six layout and does not wrap at boundaries', () => {
+test('arrow-key focus follows the physical one-by-six layout and does not wrap at boundaries', () => {
   const bays = CARPARK_LAYOUT.bays;
   assert.equal(bayInDirection(bays, 'B2-01', 'ArrowRight'), 'B2-02');
-  assert.equal(bayInDirection(bays, 'B2-02', 'ArrowDown'), 'B2-08');
-  assert.equal(bayInDirection(bays, 'B2-08', 'ArrowUp'), 'B2-02');
-  assert.equal(bayInDirection(bays, 'B2-08', 'ArrowLeft'), 'B2-07');
-  for (const [id, key] of [['B2-01', 'ArrowLeft'], ['B2-01', 'ArrowUp'], ['B2-06', 'ArrowRight'], ['B2-12', 'ArrowDown']]) assert.equal(bayInDirection(bays, id, key), id);
+  assert.equal(bayInDirection(bays, 'B2-02', 'ArrowDown'), 'B2-02');
+  assert.equal(bayInDirection(bays, 'B2-03', 'ArrowUp'), 'B2-03');
+  assert.equal(bayInDirection(bays, 'B2-03', 'ArrowLeft'), 'B2-02');
+  for (const [id, key] of [['B2-01', 'ArrowLeft'], ['B2-01', 'ArrowUp'], ['B2-06', 'ArrowRight'], ['B2-06', 'ArrowDown']]) assert.equal(bayInDirection(bays, id, key), id);
   assert.equal(bayInDirection(bays, 'B2-02', 'Enter'), 'B2-02');
 });

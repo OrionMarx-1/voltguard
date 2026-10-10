@@ -52,7 +52,7 @@ test('synthetic baseline ranges and hotspot kernel match the documented installa
 test('scenario A immediately warns at the front wheel and stays warning through the last held frame', () => {
   let previous = null;
   for (let t = 0; t <= 65; t++) {
-    const record = recordAt('B2-08', frameAt('A', t), t);
+    const record = recordAt('B2-03', frameAt('A', t), t);
     const result = assess(record, previous, t), hotspot = hotspotRegion(record.temperaturesC);
     assert.equal(result.thermal, 'warning', `A t=${t}`);
     assert.equal(hotspot.zone, 'wheel');
@@ -100,9 +100,9 @@ test('the scenario-start contract drops baseline history so a frame jump cannot 
 });
 
 test('all baseline bays follow their occupancy/charging configuration and never trigger a rule alert over a full oscillation', () => {
-  assert.deepEqual(DEMO_BAYS.filter(bay => bay.occupied).map(bay => bay.bayId), ['B2-01', 'B2-02', 'B2-04', 'B2-05', 'B2-06', 'B2-07', 'B2-10']);
+  assert.deepEqual(DEMO_BAYS.filter(bay => bay.occupied).map(bay => bay.bayId), ['B2-01', 'B2-02', 'B2-04', 'B2-05']);
   assert.deepEqual(DEMO_BAYS.filter(bay => bay.isCharging).map(bay => bay.bayId), ['B2-01', 'B2-02', 'B2-04', 'B2-05']);
-  assert.equal(DEMO_BAYS.filter(bay => bay.emitsFrames).length, 11);
+  assert.equal(DEMO_BAYS.filter(bay => bay.emitsFrames).length, 5);
   for (const bay of DEMO_BAYS) {
     assert.equal(bay.sourceType, 'simulation');
     let previous = null;
