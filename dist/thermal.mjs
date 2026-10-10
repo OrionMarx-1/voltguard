@@ -201,6 +201,6 @@ window.addEventListener('voltguard-live',event=>{liveOnline=event.detail.online;
 window.addEventListener('voltguard-thermal-live',event=>{pause();request++;loading=false;view.classList.remove('thermal-loading');liveRecord=event.detail.report;liveOnline=event.detail.online;mode='live';records=[];sample=0;const hot=hottestSensor(matrix());selection={row:hot.row,col:hot.col};show();});
 window.addEventListener('voltguard-language',render);
 window.addEventListener('resize',()=>{draw();drawHistory();});
-const defaultView=()=>{const requested=new URLSearchParams(location.search).get('view');if(!requested||requested==='thermal')show();};
+const defaultView=()=>{if(bridge.view==='thermal')show();};
 window.addEventListener('voltguard-ready',defaultView);if(bridge.ready)defaultView();else render();
 setInterval(()=>{if(mode==='live'&&!view.hidden)updateSample();},3000);

@@ -111,9 +111,7 @@ details.innerHTML = `<div id="cpDetailNotice" class="cp-detail-notice" role="sta
 $('cpSelectedOccupancy').after(details);
 const decisionHost = document.createElement('div'); decisionHost.className = 'cp-decision-panel'; details.after(decisionHost);
 const operatorHost = document.createElement('div'); operatorHost.className = 'cp-operator'; view.querySelector('.cp-demo-banner').after(operatorHost);
-const tab = document.createElement('button');
-tab.id = 'carparkTab'; tab.type = 'button'; tab.className = 'view-tab'; tab.setAttribute('aria-controls', 'carparkView');
-document.querySelector('.view-tabs').prepend(tab);
+const tab = $('carparkTab');
 
 const vehicleSvg = '<svg viewBox="0 0 54 88" aria-hidden="true"><rect class="cp-car-body" x="9" y="4" width="36" height="80" rx="13"/><path class="cp-car-window" d="M16 23h22l3 17H13zM14 59h26l-3 14H17z"/><path class="cp-car-trim" d="M10 47h34M14 11h7m12 0h7M14 79h7m12 0h7"/><rect x="5" y="21" width="4" height="16" rx="2"/><rect x="45" y="21" width="4" height="16" rx="2"/><rect x="5" y="58" width="4" height="16" rx="2"/><rect x="45" y="58" width="4" height="16" rx="2"/></svg>';
 const bayElements = new Map();
@@ -383,7 +381,7 @@ const freshnessTimer = setInterval(() => {
   else if (!view.hidden) render();
 }, 1000);
 window.addEventListener('pagehide', () => { stopped = true; detailLoader.close(); clearInterval(freshnessTimer); clearTimeout(reconnectTimer); socket?.close(); });
-const requested = () => new URLSearchParams(location.search).get('view') === 'carpark';
+const requested = () => bridge.view === 'carpark';
 window.addEventListener('voltguard-ready', () => { if (requested()) show(); });
 window.addEventListener('voltguard-data-error', () => { if (requested()) show(); });
 if (requested()) show(); else render();

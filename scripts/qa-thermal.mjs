@@ -13,7 +13,7 @@ const browser=await chromium.launch({executablePath:'C:/Program Files (x86)/Micr
 const context=await browser.newContext({viewport:{width:1440,height:1040}});
 const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
 try{
- await page.goto(base+'/?lang=en',{waitUntil:'networkidle'});await page.locator('#thermalTemperature').filter({hasNotText:'—'}).waitFor();
+ await page.goto(base+'/?view=thermal&lang=en',{waitUntil:'networkidle'});await page.locator('#thermalTemperature').filter({hasNotText:'—'}).waitFor();
  await page.locator('#thermal3d[data-geometry="single-cell"]').waitFor();
  assert.equal(await page.locator('.thermal-webgl').isVisible(),true);
  assert.equal(await page.locator('#thermal3d').getAttribute('data-measured'),'1');
@@ -83,7 +83,7 @@ try{
  assert.deepEqual(errors,[]);
  const unsupported=await context.newPage();
  await unsupported.addInitScript(()=>{const original=HTMLCanvasElement.prototype.getContext;HTMLCanvasElement.prototype.getContext=function(type,...args){return type==='webgl2'?null:original.call(this,type,...args);};});
- await unsupported.goto(base+'/?lang=en',{waitUntil:'networkidle'});await unsupported.locator('#thermal3dStatus').filter({hasText:'3D unavailable'}).waitFor();
+ await unsupported.goto(base+'/?view=thermal&lang=en',{waitUntil:'networkidle'});await unsupported.locator('#thermal3dStatus').filter({hasText:'3D unavailable'}).waitFor();
  assert.equal(await unsupported.locator('#thermalMap').isVisible(),true);
  assert.equal(await unsupported.locator('#thermalTemperature').innerText(),'41.05');
  assert.equal(/[\u3400-\u9fff]/.test((await unsupported.locator('body').innerText()).replace('中文','')),false);await unsupported.close();

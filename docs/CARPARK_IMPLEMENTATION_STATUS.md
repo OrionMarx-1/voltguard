@@ -237,3 +237,28 @@ $node = 'C:\Users\Admin1\AppData\Local\Programs\nodejs-v24.13.0\node.exe'
 - 普通浏览器回归 `qa-carpark-ai.mjs`、`qa-carpark-decisions.mjs`、`qa-carpark.mjs`、`qa-browser.mjs` 四项均输出 `ok=true`；使用本机服务／测试替身，不调用真实模型。
 - 新增 `scripts/live-bay-ui-check.mjs`，三次真实模型结果全部通过校验，浏览器流程输出 `ok=true`；核实双语无需重发、建议只预填、人工处理、危险禁止降级、密钥不进入 HTTP / WS、仿真与 NASA 隔离及重置清空。桌面截图在 `.sites-runtime/live-bay-ui/`，已检查危险场景截图。
 - 4173 实际 HTTP 状态为 `aiConfigured=true`、`aiMode=provider`、十二车位、仿真且不可导出，启动后保持无场景，等待用户演示。第 8 轮导航与最终文档调整尚未实施。
+
+## 第 8 轮：默认车位首页与最终演示文档
+
+### 查看最终演示
+
+运行 `serve.mjs` 后打开 **http://127.0.0.1:4173/**，默认进入「車位監控」。顶部只有两个主入口：「車位監控」和「規則驗證（NASA 電芯）」。后者显示原「溫度圖／總覽／電芯詳情／現場工作台」子导航，原有实测查看、3D、仿真小演示、报告导入／导出／打印、处理记录和 NASA 助手仍可使用。容量健康度、交接及前线模式仅保留在这组 NASA 工具中，不加入车位主流程。
+
+主入口切换时保留车位演示会话，并在当前页面记住最近打开的 NASA 子页面。现有 `?view=carpark`、`fleet`、`detail&cell=B0018`、`thermal`、`operations` 链接和语言参数继续可用；没有 view 或未知 view 时进入车位首页。
+
+### 实现与文档
+
+- 新增 `dist/navigation.mjs`、`navigation.css`：统一主导航归属、双语标签、当前入口、NASA 子导航显示和手机布局。初始化保留当前页面选择，NASA 索引延迟／失败不遮蔽默认车位首页或将其切回旧首页。
+- 页面标题与摘要改为车位监控原型，车位区保留仿真及不可导出标示；NASA 工具的既有数据与来源限制不变。
+- Service Worker 更新为 v18，缓存新导航资源，不缓存 API。已有受控页面在替换 worker 接管后刷新，避免旧缓存继续运行旧导航；首次缓存安装不强制刷新。
+- `README.md` 更新定位、运行方法、场景演示、两级导航、真实 AI 配置、验证命令及已测模型局限；旧 NASA 比赛素材明确标为早期版本，未更新演示视频或 PPT。
+- `API.md` 补全车位读取、场景／重置、决定输入及冲突、AI 执行状态／触发／时限、WS 摘要、独立表及重置范围；说明 `/api/health.aiConfigured` 是 NASA 助手配置，车位配置从车位会话读取。保留 NASA API 契约，不把仿真和实测合并。
+
+### 实际验证
+
+- 新增 `tests/navigation.test.mjs` 两项测试：默认／未知参数、旧 NASA 深链接、主入口归属、最近 NASA 子页面保留。全套 **97/97 测试通过**。
+- 新增 `scripts/qa-navigation.mjs`：默认十二车位、两个主入口、全部 NASA 子页面、演示会话保留、旧链接、双语、手机及文字放大、NASA 延迟／失败、静态服务边界、离线访问和替换缓存 worker 刷新，输出 `ok=true`。
+- 更新 NASA 浏览器脚本以显式打开 `view=thermal`，保留原功能断言；车位脚本通过「规则验证」主入口进入温度图。实际运行 `qa-navigation`、`qa-carpark`、`qa-carpark-decisions`、`qa-carpark-ai`、`qa-thermal`、`qa-simulation`、`qa-workbench`、`qa-evidence`、`qa-copilot`、`qa-ux`、`qa-browser` **十一项浏览器验证全部 `ok=true`**，没有页面运行错误。本轮不发出真实模型请求。
+- 已检查 `.sites-runtime/qa-navigation-v18/` 的桌面和手机截图。NASA 助手 QA 生成的截图复制到该忽略目录，测试改写的旧比赛素材还原，不混入本轮提交。
+
+技术文档列出的八轮实现现已交付。模型质量、车辆实测与阈值校准仍是已记录的验证边界：第 7 轮的超时、A 未建议降级及图像对照成因未达预期，不因完成导航而变为达标；NASA 电芯数据也不是停车场整车验证。

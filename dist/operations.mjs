@@ -264,10 +264,10 @@ el('opsInspect').addEventListener('click',()=>{if(!report)return;if(report.recor
 el('opsSpeak').addEventListener('click',()=>{if(!('speechSynthesis'in window)){displayMessage(c().noSpeech,true);return;}speechSynthesis.cancel();const utterance=new SpeechSynthesisUtterance(c().steps.join(' '));utterance.lang=bridge.language==='zh'?'zh-HK':'en-GB';utterance.rate=.9;speechSynthesis.speak(utterance);});
 el('opsStop').addEventListener('click',()=>window.speechSynthesis?.cancel());
 window.addEventListener('voltguard-language',()=>{message='';window.speechSynthesis?.cancel();render();});
-window.addEventListener('voltguard-ready',()=>{if(new URLSearchParams(location.search).get('view')==='operations')show();});
-window.addEventListener('voltguard-data-error',show);
+window.addEventListener('voltguard-ready',()=>{if(bridge.view==='operations')show();});
+window.addEventListener('voltguard-data-error',()=>{if(bridge.view!=='carpark')show();});
 window.addEventListener('voltguard-report-request',event=>{recordRequest++;recordLoading=false;report=event.detail;persistedReport=false;displayMessage('');render();});
-if(bridge.ready&&new URLSearchParams(location.search).get('view')==='operations')show();
+if(bridge.ready&&bridge.view==='operations')show();
 setInterval(renderLive,3000); render();
 // Do not probe arbitrary public endpoints. The bundled service is intentionally loopback-only.
 if (['127.0.0.1','localhost'].includes(location.hostname)) {

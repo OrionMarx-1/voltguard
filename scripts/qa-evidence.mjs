@@ -10,7 +10,7 @@ const browser=await chromium.launch({executablePath:'C:/Program Files (x86)/Micr
 const context=await browser.newContext({viewport:{width:1440,height:1000},serviceWorkers:'block'}),page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
 const temperature=()=>page.locator('.ops-reading>div>strong').first().innerText();
 try{
- await page.goto(base+'/?lang=en',{waitUntil:'networkidle'});await page.locator('#thermalTemperature').filter({hasNotText:'—'}).waitFor();
+ await page.goto(base+'/?view=thermal&lang=en',{waitUntil:'networkidle'});await page.locator('#thermalTemperature').filter({hasNotText:'—'}).waitFor();
  await page.locator('#thermalScrub').evaluate(el=>{el.value=0;el.dispatchEvent(new Event('input',{bubbles:true}));});
  assert.equal(await page.locator('#thermalTemperature').innerText(),'25.09');await page.locator('#thermalHandover').click();
  assert.match(await temperature(),/25.09/);await page.locator('#opsSave').click();await page.locator('.ops-event').waitFor();

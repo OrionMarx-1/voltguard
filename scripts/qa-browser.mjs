@@ -16,7 +16,7 @@ let carparkMessages=0,nasaApiReads=0;
 page.on('request',request=>{if(['/api/fleet','/api/events'].includes(new URL(request.url()).pathname))nasaApiReads++;});
 page.on('websocket',socket=>socket.on('framereceived',event=>{if(JSON.parse(String(event.payload)).type==='bays')carparkMessages++;}));
 try{
-  await page.goto(base+'/?lang=en',{waitUntil:'networkidle'});
+  await page.goto(base+'/?view=thermal&lang=en',{waitUntil:'networkidle'});
   await page.locator('#thermalTemperature').filter({hasNotText:'—'}).waitFor();
   await page.locator('#fleetTab').click();
   await page.locator('#fleetRows .fleet-row').first().waitFor();

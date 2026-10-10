@@ -2,7 +2,69 @@
 
 Default origin: `http://127.0.0.1:4173`. Loopback only, no CORS sharing. The static public Site does not expose these APIs.
 
-## Telemetry contract
+The default browser route is the carpark monitor. NASA measurement tools live under the secondary **Rule validation (NASA cells)** entry. Their existing API contracts are retained below; carpark simulation uses separate routes and tables.
+
+## Carpark simulation API
+
+All carpark responses carry simulation provenance through `sourceType: "simulation"` on the result/session/records and `exportable: false` on result/session/decision/AI-run records. These are deterministic demo frames, not camera or vehicle measurements. No `POST /api/frames` gateway is implemented. NASA `telemetry`, `events` and `audit` tables do not receive carpark frames, AI runs or decisions.
+
+| Method / route | Response / input |
+|---|---|
+| `GET /api/carpark` | `schemaVersion: voltguard-carpark-state-1`, `layout`, current `session`, twelve bay summaries |
+| `GET /api/bays/:id` | Bay configuration, summary, latest full frame, rule assessment, hotspot, up to sixty history samples, active alert, session, AI status / runs and append-only decisions; unknown bay returns 404 `BAY_NOT_FOUND` |
+| `GET /api/alerts` | Current session and pending / handled alerts, sorted by pending status, danger then age |
+| `POST /api/demo/scenario` | `{ "name": "A", "ai": false }` or B; starts a new session, clearing the previous current session's frames, alerts, runs and decisions; requires a boolean `ai` |
+| `POST /api/demo/reset` | Exact empty JSON object `{}`; clears the current demo and begins normal baseline playback |
+| `POST /api/alerts/:id/decisions` | Explicit operator decision; returns 201 with `decision`, updated `alert`, current `session`, simulation and non-exportable flags |
+
+Browser writes require JSON, a trusted loopback host/origin and `X-Voltguard-Csrf` from `GET /api/health`. Invalid scenario/reset payloads return 422. Decision conflicts/invalid fields return 409 with a fixed code; unknown/stale alert returns 409 `ALERT_NOT_ACTIVE`. Carpark APIs are local-only. Session creation and AI configuration indicators do not prove provider quality.
+
+`session` includes `id`, `startedAt`, `scenario` (A, B or null), `aiRequested`, `aiEnabled`, `aiConfigured`, `aiMode` (`provider`, `test_stub`, `unconfigured`), `sourceType`, `timeCompressed`, `exportable`. `aiEnabled` requires both the selected checkbox and a configured provider. `/api/health.aiConfigured` refers to the **NASA evidence assistant**; use `/api/carpark.session.aiConfigured` for carpark AI.
+
+Bay summaries have `id`, status (`normal`, `warning`, `danger`, `no_data`), a separate `noData` flag, peak / rise values, occupancy / charging, sequence and alert reference. A newly connected normal-temperature bay initially has no comparable rate, so its data-quality detail indicates connecting; it is not certified normal. No-data overlays retain known warning/danger severity. Frames are `voltguard-frame-1`, 24 rows × 32 columns, with missing pixels kept as null. Full matrices and model reasons are fetched through detail, not WS. Rule thresholds are prototype values (60°C / 1°C/s warning, 80°C / 2°C/s danger), not validated whole-vehicle limits.
+
+### Decisions
+
+```json
+{
+  "level": "maintain",
+  "extras": [],
+  "aiStance": "none",
+  "aiRunId": null,
+  "operator": "P1",
+  "viewedMs": 1200
+}
+```
+
+- `level`: `downgrade`, `maintain`, `escalate`, or null when extras alone are selected. At least one level/action is required.
+- `extras`: unique subset of `dispatch_patrol`, `notify_manager`, `call_999`. `call_999` is treated as escalation; it records a choice and does not call anyone.
+- `operator`: trimmed, nonempty, up to twenty Unicode characters, no control characters. `operatorVerified=false`; no authenticated identity is claimed.
+- `viewedMs`: nonnegative safe integer, the browser's viewing duration; not a physiological measurement or signed timestamp.
+- `aiStance`: `none`, `confirmed`, `rejected`. `none` requires `aiRunId=null`; the others require the latest valid run from the current session and alert at the current severity. Confirmation requires the selected effective level to match the recommendation. Danger cannot be downgraded through any path; confirming battery-zone or undetermined-cause downgrade is also rejected.
+
+Decisions append only and capture the server's latest full frame separately from the linked AI input frame (`aiRunId`, detail `aiRun`). Manual decisions work while AI is disabled, unconfigured, waiting or unavailable. Extra-only choices leave the alert pending. Maintain / escalation marks processing; manual downgrade marks observation without lowering the stored rule severity. A downgraded warning reopens on a +3°C increase, >=1°C/s rise or danger escalation; processed alerts close only after ten seconds of continuously normal, current evidence. Pending alerts do not auto-close when cooling. Prototype durations and deltas need field calibration.
+
+### Carpark AI and independent storage
+
+`serve.mjs` automatically loads the ignored private `.env`, with explicit process variables taking precedence. `VOLTGUARD_AI_ENABLED=true` plus `VOLTGUARD_AI_BASE_URL`, `VOLTGUARD_AI_MODEL`, `VOLTGUARD_AI_API_KEY` enables the configured OpenAI-compatible Chat Completions endpoint. Credentials never enter public status, WS or browser code. They are distinct from `OPENAI_API_KEY` for the NASA assistant.
+
+Calls occur only on alert creation, escalation or reopening. One effective request per alert, two globally; preparation, queuing, network, JSON parsing and format fallback share a nine-second budget. Language switching does not call the model. New events invalidate prior runs; reset aborts old-session work and discards late replies. There is no answer cache, replay or local fabricated fallback.
+
+The provider receives one fixed-palette 256×192 PNG with region outlines, program-computed hotspot labels, current/exact ten/thirty-second peaks, current rise, count over 60°C, rule/alert severity and charging context. Bay identifiers, timestamps, operator codes and the simulation scenario label are not sent. Output is exactly `cause`, `recommendation`, `rationale_zh`, `rationale_en`, `next_steps`, validated independently even with strict schema. Both reasons forbid digits and selected unsafe reassurance/firefighting language; protected causes / danger forbid downgrade. These lexical checks do not prove diagnostic accuracy or bilingual semantic equivalence.
+
+`cause` allows `battery_zone_anomaly`, `brake_residual_heat`, `recently_parked`, `engine_or_exhaust`, `sun_or_ambient`, `undetermined`; `recommendation` allows `escalate`, `maintain`, `downgrade`. Traditional Chinese rationale is nonempty and at most eighty characters; English rationale at most three hundred. `next_steps` is a nonempty unique subset of `observe`, `dispatch_patrol`, `notify_manager`, `call_999`; the last requires `escalate`.
+
+Detail `ai` status is `waiting`, `available`, `unavailable` or `stale`; a missing analysis has an explicit unavailable code. Actual run records include IDs/session, input frame and sequence, request severity, created time, model, measured `latencyMs`, `ok`, error code, output, hotspot and simulation flags. Public history excludes internally rejected raw output. Failures preserve rules and manual choices. Typical codes: `AI_NOT_CONFIGURED`, `AI_DISABLED`, `AI_NO_ALERT`, `AI_TIMEOUT`, `AI_REFUSAL`, `AI_PROVIDER_ERROR`, `AI_PROVIDER_RATE_LIMIT`, `AI_JSON`, `AI_INCOMPLETE`, `AI_OUTPUT_*`, `AI_STALE`, `AI_STORAGE`. A fixed code does not expose provider error text or keys.
+
+`demo_sessions`, `bay_alerts`, `bay_ai_runs` and `bay_decisions` are independent SQLite tables. Reset deletes the current session and cascades its child records; the separate local evaluation files are not demo-session records and remain under ignored `.sites-runtime/`. There is no carpark export API.
+
+### WS updates and evaluation
+
+`WS /ws` retains measured-data messages and adds `{ "type": "bays" | "alert" | "ai" | "decision", "report": ... }`. `bays` is a once-per-second session + twelve-summary batch; `alert` carries event + alert, `ai` carries run status/error metadata, `decision` carries session/bay/alert/decision IDs. No matrix, model rationale or secret is broadcast. Browsers fetch only the selected bay's new detail. NASA record refresh ignores carpark messages.
+
+Real checks are explicitly opt-in: `scripts/live-bay-ai-check.mjs` defaults to thirty real calls, comparing production evidence with image-only input, and saves time/validation/expected-cause/expected-recommendation metrics under `.sites-runtime/live-bay-ai/`. Image-only checks never enter the production flow. Results have synthetic provenance and do not establish vehicle diagnosis or a latency guarantee. See [round 7 measurements and remaining gaps](docs/BAY_AI_LIVE_CHECK.md). Ordinary tests and `qa-*` do not load private `.env` or call real providers.
+
+## NASA / authorized telemetry contract
 
 Required fields:
 
@@ -33,7 +95,7 @@ NASA bundled-cycle reports use a separate trusted adapter because NASA dates are
 | `GET /api/events` | Latest 100 events and their supporting report |
 | `GET /api/events/:id/history` | Local event metadata, supporting report and the latest 200 recorded processing actions |
 | `PATCH /api/events/:id` | `{ "action": "acknowledge" }` or `{ "action": "close" }` |
-| `WS /ws` | Receive-only `connected`, `telemetry`, `events`, `heartbeat` messages |
+| `WS /ws` | Receive-only `connected`, `telemetry`, `events`, `heartbeat` and the carpark messages documented above |
 
 Browser writes to record/event routes require `X-Voltguard-Csrf` from `/api/health`. API request body limit is 256 KB. Requests are JSON; non-finite values, ragged matrices, missing provenance, malformed dates, stale/future live timestamps and reordered live samples are rejected. Live timestamps must be at most 15 seconds old or 5 seconds ahead of the service clock. Hardware clock synchronization is a prerequisite, not something the server assumes it has verified.
 
@@ -55,7 +117,7 @@ Success: `schemaVersion: voltguard-copilot-1`, `model`, `generatedAt`, measured 
 
 The output guard rejects new numerical claims, unsupported references, omitted mandatory limitations and selected unsafe reassurance/firefighting language. This lexical guard is **not proof of semantic accuracy**. Actual model quality, bilingual safety and latency still need real-key evaluation and expert review. The UI labels every result for human review. Model refusal, incomplete output, invalid JSON/schema, provider error, timeout or rejected response returns an explicit error and preserves Tier 1.
 
-Documented provider references: [GPT-4o](https://developers.openai.com/api/docs/models/gpt-4o), [Structured Outputs](https://developers.openai.com/api/docs/guides/structured-outputs), [Images](https://developers.openai.com/api/docs/guides/images-vision), [data controls](https://developers.openai.com/api/docs/guides/your-data). Checked 3 October 2026. Live API testing has not occurred because no key was configured.
+Documented provider references: [GPT-4o](https://developers.openai.com/api/docs/models/gpt-4o), [Structured Outputs](https://developers.openai.com/api/docs/guides/structured-outputs), [Images](https://developers.openai.com/api/docs/guides/images-vision), [data controls](https://developers.openai.com/api/docs/guides/your-data). Checked 3 October 2026. This NASA-assistant path has not been evaluated with a real key; the separately configured carpark AI was evaluated in round 7.
 
 ## Event semantics
 

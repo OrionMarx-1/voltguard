@@ -1,6 +1,8 @@
-const CACHE_NAME = 'voltguard-demo-v16';
+const CACHE_NAME = 'voltguard-demo-v18';
 const CORE_ASSETS = [
   './',
+  './navigation.mjs',
+  './navigation.css',
   './operations.css',
   './operations.mjs',
   './safety.mjs',
@@ -72,7 +74,7 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  if (url.pathname.includes('/data/') || url.pathname.includes('/carpark/') || url.pathname.includes('/vendor/three/') || /\/(operations\.(css|mjs)|(?:safety|evidence|guidance|field-mode|ux-accessibility)\.mjs|copilot(?:-panel)?\.(css|mjs)|thermal(?:-map|-3d|-ux|-simulation)?\.(css|mjs))$/.test(url.pathname)) {
+  if (url.pathname.includes('/data/') || url.pathname.includes('/carpark/') || url.pathname.includes('/vendor/three/') || /\/(navigation\.(css|mjs)|operations\.(css|mjs)|(?:safety|evidence|guidance|field-mode|ux-accessibility)\.mjs|copilot(?:-panel)?\.(css|mjs)|thermal(?:-map|-3d|-ux|-simulation)?\.(css|mjs))$/.test(url.pathname)) {
     event.respondWith(
       caches.match(request, { ignoreSearch: true }).then(cached => cached || fetch(request).then(response => {
         if (response.ok) {
