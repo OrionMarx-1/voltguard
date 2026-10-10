@@ -16,11 +16,13 @@ export function createDemoCarpark({ db, broadcast, now = Date.now, autoStart = t
     CREATE TABLE IF NOT EXISTS bay_ai_runs(id TEXT PRIMARY KEY, session_id TEXT NOT NULL REFERENCES demo_sessions(id) ON DELETE CASCADE, alert_id TEXT NOT NULL REFERENCES bay_alerts(id) ON DELETE CASCADE, bay_id TEXT NOT NULL, record TEXT NOT NULL);
     CREATE INDEX IF NOT EXISTS idx_bay_ai_session_bay ON bay_ai_runs(session_id,bay_id);
   `);
+  // Existing local prototypes retain their tables; only add the pending timestamp.
+  if (!db.prepare('PRAGMA table_info(bay_alerts)').all().some(column => column.name === 'pending_since')) db.exec('ALTER TABLE bay_alerts ADD COLUMN pending_since TEXT');
   let session, ai;
   function persistAlert(alert) {
-    db.prepare(`INSERT INTO bay_alerts(id,session_id,bay_id,level,status,escalation_source,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)
-      ON CONFLICT(id) DO UPDATE SET level=excluded.level,status=excluded.status,escalation_source=excluded.escalation_source,updated_at=excluded.updated_at`)
-      .run(alert.id, alert.sessionId, alert.bayId, alert.level, alert.status, alert.escalationSource, alert.createdAt, alert.updatedAt);
+    db.prepare(`INSERT INTO bay_alerts(id,session_id,bay_id,level,status,escalation_source,created_at,updated_at,pending_since) VALUES(?,?,?,?,?,?,?,?,?)
+      ON CONFLICT(id) DO UPDATE SET level=excluded.level,status=excluded.status,escalation_source=excluded.escalation_source,updated_at=excluded.updated_at,pending_since=excluded.pending_since`)
+      .run(alert.id, alert.sessionId, alert.bayId, alert.level, alert.status, alert.escalationSource, alert.createdAt, alert.updatedAt, alert.pendingSince);
   }
   const monitor = createBayMonitor({ now, onAlert(event, alert) {
     persistAlert(alert); broadcast('alert', { event, alert });

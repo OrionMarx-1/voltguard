@@ -46,9 +46,10 @@ export function createBayMonitor({ now = Date.now, onAlert = () => {}, onDecisio
     if (state.frames.length > BAY_POLICY.historyFrames) state.frames.shift();
     const at = new Date(receivedAt).toISOString();
     if (!state.alert && ['warning', 'danger'].includes(assessment.thermal)) {
-      state.alert = { id: randomUUID(), sessionId, bayId: input.bayId, level: assessment.thermal, status: 'pending', escalationSource: 'rule', createdAt: at, updatedAt: at, sourceType: 'simulation' };
+      state.alert = { id: randomUUID(), sessionId, bayId: input.bayId, level: assessment.thermal, status: 'pending', pendingSince: at, escalationSource: 'rule', createdAt: at, updatedAt: at, sourceType: 'simulation' };
       onAlert('created', structuredClone(state.alert));
     } else if (state.alert?.level === 'warning' && assessment.thermal === 'danger') {
+      if (state.alert.status !== 'pending') state.alert.pendingSince = at;
       state.alert.level = 'danger';
       state.alert.escalationSource = 'rule';
       state.alert.status = 'pending';
@@ -56,7 +57,7 @@ export function createBayMonitor({ now = Date.now, onAlert = () => {}, onDecisio
       state.alert.updatedAt = at;
       onAlert('escalated', structuredClone(state.alert));
     } else if (state.alert?.status === 'downgraded' && (assessment.peakC >= state.downgradePeak + BAY_POLICY.reopenDeltaC || assessment.riseCPerS >= POLICY.warningRiseCPerS)) {
-      state.alert.status = 'pending'; state.alert.updatedAt = at; state.normalSince = null;
+      state.alert.status = 'pending'; state.alert.pendingSince = at; state.alert.updatedAt = at; state.normalSince = null;
       onAlert('reopened', structuredClone(state.alert));
     }
     if (state.alert && state.alert.status !== 'pending') {
@@ -82,13 +83,17 @@ export function createBayMonitor({ now = Date.now, onAlert = () => {}, onDecisio
       connecting: Boolean(latest && !disconnected && insufficient && latest.assessment.riseCPerS === null),
       peakC: latest?.assessment.peakC ?? null, riseCPerS: latest?.assessment.riseCPerS ?? null,
       isCharging: demo.isCharging, occupied: demo.occupied || SCENARIOS[activeScenario]?.bayId === state.bay.id,
-      alertId: state.alert?.id ?? null, alertStatus: state.alert?.status ?? null, frameSeq: latest?.frame.seq ?? null
+      alertId: state.alert?.id ?? null, alertStatus: state.alert?.status ?? null, frameSeq: latest?.frame.seq ?? null,
+      pendingSince: state.alert?.pendingSince ?? null, pendingSeconds: pendingSeconds(state.alert, at)
     };
   }
   const summaries = () => [...states.values()].map(state => summary(state));
+  function pendingSeconds(alert, at = now()) {
+    return alert?.status === 'pending' && alert.pendingSince ? Math.max(0, Math.floor((at - Date.parse(alert.pendingSince)) / 1000)) : null;
+  }
   function alerts() {
     return [...states.values()].filter(state => state.alert).map(state => ({
-      ...state.alert, noData: summary(state).noData,
+      ...state.alert, pendingSeconds: pendingSeconds(state.alert), noData: summary(state).noData,
       recovered: !summary(state).noData && state.frames.at(-1)?.assessment.thermal === 'normal'
     })).sort((a, b) => (a.status === 'pending' ? 0 : 1) - (b.status === 'pending' ? 0 : 1) || (a.level === 'danger' ? 0 : 1) - (b.level === 'danger' ? 0 : 1) || a.createdAt.localeCompare(b.createdAt) || a.bayId.localeCompare(b.bayId));
   }
@@ -99,6 +104,7 @@ export function createBayMonitor({ now = Date.now, onAlert = () => {}, onDecisio
     const at = now(), next = { ...state.alert, updatedAt: new Date(at).toISOString() };
     if (choice.level === 'escalate') { next.level = 'danger'; next.escalationSource = state.alert.level === 'danger' ? state.alert.escalationSource : 'operator'; next.status = 'processing'; }
     else if (choice.level) next.status = choice.level === 'downgrade' ? 'downgraded' : 'processing';
+    if (choice.level) next.pendingSince = null;
     const decision = { id: randomUUID(), ...choice, alertId, bayId: state.bay.id, at: next.updatedAt,
       levelBefore: state.alert.level, levelAfter: next.level, frameSeq: latest.frame.seq, frame: structuredClone(latest.frame), sessionId, sourceType: 'simulation', exportable: false };
     // Persist before publishing or changing memory, so failed writes are reversible.

@@ -4,6 +4,8 @@ import { zoneLabels } from './layout.mjs';
 import { createBayDetailLoader } from './detail-loader.mjs';
 import { drawBayFrame, trendGeometry } from './detail-render.mjs';
 import { createDecisionPanel } from './decision-panel.mjs';
+import { reminderCycleKey, reminderPolicy } from './reminders.mjs';
+import { createReminderAudio } from './reminder-audio.mjs';
 
 const bridge = window.voltguard, $ = id => document.getElementById(id);
 const words = {
@@ -111,6 +113,12 @@ details.innerHTML = `<div id="cpDetailNotice" class="cp-detail-notice" role="sta
 $('cpSelectedOccupancy').after(details);
 const decisionHost = document.createElement('div'); decisionHost.className = 'cp-decision-panel'; details.after(decisionHost);
 const operatorHost = document.createElement('div'); operatorHost.className = 'cp-operator'; view.querySelector('.cp-demo-banner').after(operatorHost);
+const reminderHost = document.createElement('div'); reminderHost.className = 'cp-reminder-controls';
+reminderHost.innerHTML = '<button id="cpReminderEnable" class="cp-button" type="button"></button><button id="cpGlobalMute" class="cp-button" type="button" aria-pressed="false"></button><span id="cpReminderState" role="status"></span>';
+operatorHost.after(reminderHost);
+const reminderAudio = createReminderAudio(), mutedUntil = new Map(); let globalMuted = false, reminderEnableFailed = false;
+$('cpReminderEnable').addEventListener('click', async () => { reminderEnableFailed = !await reminderAudio.enable(); updateReminders(); });
+$('cpGlobalMute').addEventListener('click', () => { globalMuted = !globalMuted; updateReminders(); });
 const tab = $('carparkTab');
 
 const vehicleSvg = '<svg viewBox="0 0 54 88" aria-hidden="true"><rect class="cp-car-body" x="9" y="4" width="36" height="80" rx="13"/><path class="cp-car-window" d="M16 23h22l3 17H13zM14 59h26l-3 14H17z"/><path class="cp-car-trim" d="M10 47h34M14 11h7m12 0h7M14 79h7m12 0h7"/><rect x="5" y="21" width="4" height="16" rx="2"/><rect x="45" y="21" width="4" height="16" rx="2"/><rect x="5" y="58" width="4" height="16" rx="2"/><rect x="45" y="58" width="4" height="16" rx="2"/></svg>';
@@ -119,7 +127,7 @@ for (const bay of CARPARK_LAYOUT.bays) {
   const button = document.createElement('button');
   button.type = 'button'; button.className = 'cp-bay'; button.dataset.bay = bay.id;
   button.style.gridColumn = String(bay.col + 1); button.style.gridRow = String(bay.row + 1);
-  button.innerHTML = `<span class="cp-bay-top"><strong>${bay.id}</strong><span class="cp-charger-icon" aria-hidden="true">${bay.charging ? 'ϟ' : ''}</span></span><span class="cp-bay-state"><span class="cp-state-icon" aria-hidden="true"></span><span class="cp-state-text"></span></span><span class="cp-bay-vehicle">${vehicleSvg}<span class="cp-empty-icon" aria-hidden="true">P</span></span><span class="cp-bay-temperature"></span><span class="cp-bay-occupancy"></span><span class="cp-bay-missing"></span>`;
+  button.innerHTML = `<span class="cp-bay-top"><strong>${bay.id}</strong><span class="cp-charger-icon" aria-hidden="true">${bay.charging ? 'ϟ' : ''}</span></span><span class="cp-bay-state"><span class="cp-state-icon" aria-hidden="true"></span><span class="cp-state-text"></span></span><span class="cp-bay-vehicle">${vehicleSvg}<span class="cp-empty-icon" aria-hidden="true">P</span></span><span class="cp-bay-temperature"></span><span class="cp-bay-occupancy"></span><span class="cp-bay-missing"></span><span class="cp-bay-pending-age" hidden></span>`;
   button.addEventListener('click', () => selectBay(bay.id));
   button.addEventListener('keydown', event => {
     if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return;
@@ -203,7 +211,7 @@ function renderDetail(bay, config) {
 }
 function renderAlerts() {
   const shown = displayAlerts(alerts, snapshot?.bays ?? [], connected);
-  const signature = JSON.stringify([bridge.language, service, connected, shown]);
+  const signature = JSON.stringify([bridge.language, service, connected, shown.map(({ pendingSeconds, ...alert }) => alert)]);
   if (signature === alertSignature) return;
   alertSignature = signature; $('cpAlertList').replaceChildren();
   if (!alerts.length) {
@@ -221,14 +229,60 @@ function renderAlerts() {
       const title = document.createElement('h3'); title.textContent = c()[group]; groupHost.append(title); $('cpAlertList').append(groupHost);
     }
     const button = document.createElement('button'); button.type = 'button'; button.className = 'cp-alert-item'; button.dataset.level = alert.level; button.dataset.alertStatus = alert.status;
+    const row = document.createElement('div'); row.className = 'cp-alert-row'; row.dataset.alertId = alert.id;
     const head = document.createElement('span'); head.className = 'cp-alert-item-head';
     const id = document.createElement('strong'); id.textContent = alert.bayId;
     const label = document.createElement('span'); label.textContent = `${icons[alert.level] ?? '!'} ${c()[alert.level] ?? c().warning}`;
     head.append(id, label);
     const note = document.createElement('small'); note.textContent = `${c()[alert.status] ?? c().pending}${!connected || alert.noData ? ` · ${c().no_data}` : alert.recovered ? ` · ${c().recovered}` : ''}`;
-    button.append(head, note); button.addEventListener('click', () => { selectBay(alert.bayId); bayElements.get(alert.bayId)?.focus(); });
-    groupHost.append(button);
+    const age = document.createElement('small'); age.className = 'cp-alert-pending-age'; age.hidden = true;
+    button.append(head, note, age); button.addEventListener('click', () => { selectBay(alert.bayId); bayElements.get(alert.bayId)?.focus(); });
+    row.append(button);
+    if (alert.status === 'pending') {
+      const mute = document.createElement('button'); mute.type = 'button'; mute.className = 'cp-alert-mute cp-button';
+      mute.addEventListener('click', () => {
+        const current = reminderAlerts().find(item => item.id === alert.id);
+        if (current?.status === 'pending') { mutedUntil.set(reminderCycleKey(current), Date.now() + 60000); updateReminders(); }
+      });
+      row.append(mute);
+    }
+    groupHost.append(row);
   }
+}
+function reminderAlerts() {
+  return alerts.map(alert => {
+    const bay = snapshot?.bays.find(item => item.alertId === alert.id);
+    return bay ? { ...alert, status: bay.alertStatus, level: bay.status, pendingSince: bay.pendingSince, pendingSeconds: bay.pendingSeconds } : alert;
+  });
+}
+function updateReminders() {
+  const current = reminderAlerts(), at = Date.now(), zh = bridge.language === 'zh';
+  const activeCycles = new Set(current.filter(alert => alert.status === 'pending').map(reminderCycleKey));
+  for (const [key, until] of mutedUntil) if (!activeCycles.has(key) || until <= at) mutedUntil.delete(key);
+  $('cpReminderEnable').hidden = reminderAudio.enabled;
+  setText($('cpReminderEnable'), zh ? '點擊啟用提醒音' : 'Click to enable alert sounds');
+  $('cpGlobalMute').setAttribute('aria-pressed', String(globalMuted));
+  setText($('cpGlobalMute'), zh ? (globalMuted ? '提醒音：已靜音 · 取消靜音' : '提醒音：未靜音 · 全局靜音') : (globalMuted ? 'Sounds: muted · Unmute all' : 'Sounds: unmuted · Mute all'));
+  setText($('cpReminderState'), reminderEnableFailed ? (zh ? '無法啟用提醒音；請重試，視覺提醒照常。' : 'Could not enable sounds; retry. Visual alerts remain active.') : !reminderAudio.enabled ? (zh ? '需先點擊啟用；視覺提醒照常。' : 'Enable sounds with a click. Visual alerts remain active.') : (zh ? '聲音與視覺提醒不依賴 AI。' : 'Sound and visual reminders work independently of AI.'));
+  for (const [bayId, button] of bayElements) {
+    const alert = current.find(item => item.bayId === bayId), policy = reminderPolicy(alert);
+    button.dataset.overdue = String(policy.overdue);
+    const age = button.querySelector('.cp-bay-pending-age'); age.hidden = !policy.overdue;
+    setText(age, policy.overdue ? (zh ? `已 ${policy.seconds} 秒未處理` : `Unhandled for ${policy.seconds} s`) : '');
+  }
+  for (const row of $('cpAlertList').querySelectorAll('.cp-alert-row')) {
+    const alert = current.find(item => item.id === row.dataset.alertId), policy = reminderPolicy(alert);
+    row.dataset.overdue = String(policy.overdue);
+    const age = row.querySelector('.cp-alert-pending-age'); age.hidden = !policy.overdue;
+    setText(age, policy.overdue ? (zh ? `已 ${policy.seconds} 秒未處理` : `Unhandled for ${policy.seconds} s`) : '');
+    const mute = row.querySelector('.cp-alert-mute');
+    if (mute) {
+      const remaining = Math.max(0, Math.ceil(((alert && mutedUntil.get(reminderCycleKey(alert))) ?? at) - at) / 1000);
+      mute.disabled = !policy.pending || remaining > 0;
+      setText(mute, remaining > 0 ? (zh ? `靜音餘 ${Math.ceil(remaining)} 秒` : `Muted: ${Math.ceil(remaining)} s left`) : (zh ? '此告警靜音 60 秒' : 'Mute this alert for 60 s'));
+    }
+  }
+  reminderAudio.tick(current, { globalMuted, mutedUntil, now: at });
 }
 function render() {
   tab.textContent = c().tab;
@@ -267,6 +321,7 @@ function render() {
   const missingIds = CARPARK_LAYOUT.bays.filter((_, index) => bays[index].noData).map(bay => bay.id);
   $('cpNoDataBays').hidden = !missingIds.length; setText($('cpNoDataBays'), `${c().blindSpots}: ${missingIds.join(', ')}`);
   setText($('cpAlertCount'), String(alerts.length)); renderAlerts();
+  updateReminders();
   const index = CARPARK_LAYOUT.bays.findIndex(bay => bay.id === selected), bay = bays[index], config = CARPARK_LAYOUT.bays[index];
   $('cpSelectedPanel').dataset.status = bay.status; $('cpSelectedPanel').setAttribute('aria-label', c().summaryLabel);
   setText($('cpSelectedId'), selected); setText($('cpSelectedType'), config.charging ? c().chargingBay : c().standardBay);
@@ -379,8 +434,9 @@ $('cpDetailRetry').addEventListener('click', () => detailLoader.retry());
 const freshnessTimer = setInterval(() => {
   if (service === 'local' && connected && Date.now() - lastUpdateAt > 5000) { connected = false; service = 'offline'; render(); }
   else if (!view.hidden) render();
+  else updateReminders();
 }, 1000);
-window.addEventListener('pagehide', () => { stopped = true; detailLoader.close(); clearInterval(freshnessTimer); clearTimeout(reconnectTimer); socket?.close(); });
+window.addEventListener('pagehide', () => { stopped = true; reminderAudio.close(); detailLoader.close(); clearInterval(freshnessTimer); clearTimeout(reconnectTimer); socket?.close(); });
 const requested = () => bridge.view === 'carpark';
 window.addEventListener('voltguard-ready', () => { if (requested()) show(); });
 window.addEventListener('voltguard-data-error', () => { if (requested()) show(); });
