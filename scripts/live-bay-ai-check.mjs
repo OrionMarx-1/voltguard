@@ -113,6 +113,73 @@ export async function saveBayCheckReport(report, { directory = path.join(root, '
   await writeFile(filename, text, { mode: 0o600 }); return filename;
 }
 
+export function prepareBayTimingRequest(sample, model) {
+  const input = prepareBayCheckInput(sample, 'formal');
+  return { evidence: JSON.parse(input.text), body: JSON.stringify({ model, store: false,
+    messages: [{ role: 'system', content: `${input.system}\nRequired output JSON schema:\n${JSON.stringify(input.schema)}` },
+      { role: 'user', content: [{ type: 'text', text: input.text }, { type: 'image_url', image_url: { url: input.imagePng, detail: 'low' } }] }],
+    response_format: { type: 'json_schema', json_schema: { name: 'voltguard_bay_explanation', strict: true, schema: input.schema } } }) };
+}
+
+export function parseBayTimingResponse(response, evidence) {
+  let data; try { data = JSON.parse(response.body); } catch { throw new BayAIError('AI_JSON'); }
+  if (response.status < 200 || response.status >= 300) throw new BayAIError(response.status === 429 ? 'AI_PROVIDER_RATE_LIMIT' : 'AI_PROVIDER_ERROR');
+  const choice = data.choices?.[0];
+  if (choice?.message?.refusal) throw new BayAIError('AI_REFUSAL');
+  if (choice?.finish_reason !== 'stop') throw new BayAIError('AI_INCOMPLETE');
+  let output; try { output = JSON.parse(choice.message.content); } catch { throw new BayAIError('AI_JSON'); }
+  return validateBayAIOutput(output, evidence.alertLevel, evidence);
+}
+
+// Deliberately fixture-only in this phase. No env loading, fetch, real-provider
+// adapter, format fallback, retry or warm-up is reachable through this entry.
+export async function runBayTimingFixture({ transport, clock = () => performance.now(), timeoutMs = 9000,
+  prepare = prepareBayTimingRequest, parseAndValidate = parseBayTimingResponse } = {}) {
+  if (transport?.kind !== 'test_stub' || typeof transport.receive !== 'function') throw new Error('TIMING_REQUIRES_TEST_STUB');
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0 || timeoutMs > 9000) throw new Error('TIMING_TIMEOUT');
+  const samples = buildBayCheckCases(), selected = [samples.find(sample => sample.scenario === 'A' && sample.second === 0), samples.find(sample => sample.scenario === 'B' && sample.second === 28)];
+  const report = { schemaVersion: 'voltguard-bay-ai-timing-fixture-1', reportType: 'segmented_timing', checkedAt: new Date().toISOString(),
+    execution: 'test_fixture', sourceType: 'simulation', exportable: false, model: transport.model ?? 'timing-test-stub',
+    limitations: 'Test-stub timings only. Ten samples cannot establish stable provider latency or a cold-start cause.',
+    timeoutMs, plannedCalls: 20, attemptedCalls: 0, realProviderCalls: 0, rows: [], completed: false };
+  const safeCodes = new Set(['AI_JSON', 'AI_PROVIDER_RATE_LIMIT', 'AI_PROVIDER_ERROR', 'AI_REFUSAL', 'AI_INCOMPLETE', 'AI_TIMEOUT', 'AI_CANCELLED',
+    'AI_OUTPUT_SCHEMA', 'AI_OUTPUT_RATIONALE', 'AI_OUTPUT_LANGUAGE', 'AI_OUTPUT_STEPS', 'AI_OUTPUT_DOWNGRADE', 'AI_OUTPUT_DOWNGRADE_RULE', 'AI_OUTPUT_CALL']);
+  for (const sample of selected) for (let iteration = 1; iteration <= 10; iteration++) {
+    const started = clock(), controller = new AbortController(); let timer, phase = null, phaseStarted = null;
+    const row = { scenario: sample.scenario, second: sample.second, iteration, timings: { prepareMs: null, waitMs: null, parseValidateMs: null },
+      totalMs: null, ok: false, errorCode: null, failedPhase: null };
+    const duration = () => Math.max(0, clock() - phaseStarted);
+    const assertBudget = () => { if (clock() - started >= timeoutMs) throw new BayAIError('AI_TIMEOUT'); };
+    const deadline = new Promise((_, reject) => { timer = setTimeout(() => { controller.abort(); reject(new BayAIError('AI_TIMEOUT')); }, timeoutMs); });
+    async function measure(name, operation) {
+      phase = name; phaseStarted = clock();
+      try { const value = await Promise.race([deadline, Promise.resolve().then(operation)]); assertBudget(); return value; }
+      finally { row.timings[name] = duration(); }
+    }
+    try {
+      const request = await measure('prepareMs', () => prepare(sample, report.model));
+      report.attemptedCalls++;
+      // The same transport instance is reused sequentially for all twenty calls.
+      const response = await measure('waitMs', () => transport.receive(request.body, { signal: controller.signal, timeoutMs: timeoutMs - (clock() - started) }));
+      await measure('parseValidateMs', () => parseAndValidate(response, request.evidence)); row.ok = true;
+    } catch (error) {
+      row.errorCode = error instanceof BayAIError && safeCodes.has(error.code) ? error.code : 'TIMING_FIXTURE_ERROR';
+      row.failedPhase = phase; controller.abort();
+    } finally { clearTimeout(timer); row.totalMs = Math.max(0, clock() - started); }
+    report.rows.push(row);
+  }
+  report.completed = true; return report;
+}
+
+export async function saveBayTimingReport(report, { directory = path.join(root, '.sites-runtime', 'live-bay-ai'), apiKey = '' } = {}) {
+  if (report.schemaVersion !== 'voltguard-bay-ai-timing-fixture-1') throw new Error('TIMING_REPORT_TYPE');
+  const text = JSON.stringify(report, null, 2);
+  if (apiKey && text.includes(apiKey)) throw new Error('AI_SECRET_OUTPUT');
+  await mkdir(directory, { recursive: true });
+  const filename = path.join(directory, `timing-fixture-${report.checkedAt.replace(/[:.]/g, '-')}-${randomUUID()}.json`);
+  await writeFile(filename, text, { mode: 0o600 }); return filename;
+}
+
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
     const args = process.argv.slice(2);
