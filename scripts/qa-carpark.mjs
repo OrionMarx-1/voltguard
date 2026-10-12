@@ -4,6 +4,7 @@ import path from 'node:path';
 import assert from 'node:assert/strict';
 import { createVoltGuardServer } from '../backend/server.mjs';
 import { temperatureColor } from '../dist/thermal-map.mjs';
+import { VEHICLE_NEUTRAL_COLOR, VEHICLE_TIRE_COLOR } from '../dist/carpark/vehicle-colors.mjs';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('C:/Users/Admin1/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright');
@@ -79,7 +80,10 @@ try {
   await page.keyboard.press('ArrowRight');
   assert.equal(await bay('B2-03').evaluate(element => element === document.activeElement), true);
   assert.equal(await page.locator('#cpSelectedId').innerText(), 'B2-03');
-  await waitDetail('B2-03'); assert.equal(await page.locator('#cpVehicle3D').isVisible(), false);
+  await waitDetail('B2-03'); assert.equal(await page.locator('#cpVehicle3D').isVisible(), true);
+  assert.equal(await page.locator('#cpVehicleHost').getAttribute('data-vehicle'), 'false');
+  assert.equal(await page.locator('#cpVehicleHost').getAttribute('data-hotspot'), 'null');
+  assert.equal(await page.locator('#cpVehicleHost').getAttribute('data-charging-cable'), 'false');
   step(); await page.waitForFunction(() => document.querySelector('[data-bay="B2-03"]').dataset.frameSeq === '3');
   assert.equal(await bay('B2-03').evaluate(element => element === document.activeElement), true);
 
@@ -96,6 +100,9 @@ try {
   await page.locator('#cpVehicle3D:not([hidden]) .cp-vehicle-canvas').waitFor();
   const wheelColors = JSON.parse(await page.locator('#cpVehicleHost').getAttribute('data-zone-colors'));
   assert.equal(wheelColors.wheel.color, temperatureColor(app.carpark.detail('B2-03').hotspot.temperatureC));
+  assert.equal(await page.locator('#cpVehicleHost').getAttribute('data-body-color'), VEHICLE_NEUTRAL_COLOR);
+  assert.equal(await page.locator('#cpVehicleHost').getAttribute('data-rear-wheel-color'), VEHICLE_TIRE_COLOR);
+  assert.equal(JSON.parse(await page.locator('#cpVehicleHost').getAttribute('data-hotspot')).color, wheelColors.wheel.color);
   assert.equal(await page.locator('#cpRuleLevel').innerText(), 'Warning');
   assert.equal(await page.locator('#cpRiseRate').innerText(), '0.00 °C/s');
   assert.equal(await page.locator('#cpTrend').getAttribute('data-samples'), '2');
@@ -162,9 +169,12 @@ try {
   assert.equal(await page.locator('#cpSelectedPanel').getAttribute('data-detail-bay'), 'B2-02');
   assert.equal(await page.locator('#cpThermalImage').getAttribute('data-region'), 'underbody');
   await bay('B2-06').click(); await waitDetail('B2-06');
-  assert.equal(await page.locator('#cpVehicle3D').isVisible(), false);
-  assert.equal(await page.locator('.cp-vehicle-canvas').count(), 0);
+  assert.equal(await page.locator('#cpVehicle3D').isVisible(), true);
+  assert.equal(await page.locator('.cp-vehicle-canvas').count(), 1);
   assert.equal(await page.locator('#cpVehicleHost').getAttribute('data-vehicle'), 'false');
+  assert.equal(await page.locator('#cpVehicleHost').getAttribute('data-hotspot'), 'null');
+  assert.equal(await page.locator('#cpVehicleHost').getAttribute('data-charging-cable'), 'false');
+  assert.equal(await page.locator('#cpVehicleHost').getAttribute('data-charger'), 'true');
   assert.equal(await page.locator('#cpFrameContent').isVisible(), false);
   assert.equal(await page.locator('#cpDetailEmpty').isVisible(), true);
   await bay('B2-02').click(); await waitDetail('B2-02');

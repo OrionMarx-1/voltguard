@@ -1,4 +1,4 @@
-const CACHE_NAME = 'voltguard-demo-v22';
+const CACHE_NAME = 'voltguard-demo-v23';
 const CORE_ASSETS = [
   './',
   './navigation.mjs',

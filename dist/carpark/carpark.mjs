@@ -12,7 +12,7 @@ import { createBayVehicle } from './vehicle-3d.mjs';
 const bridge = window.voltguard, $ = id => document.getElementById(id);
 const words = {
   zh: {
-    vehicle3d: '車位 3D · 仿真', vehicleLimit: '示意，非實車模型', vehicleColors: '各區域最高可用格點；未達超溫用中性色，超溫沿用 2D 色標。拖動可旋轉。', vehicleFallback: '3D 無法顯示；2D 熱圖與平面圖仍可用。',
+    vehicle3d: '車位 3D · 仿真', vehicleLimit: '示意，非實車模型', vehicleColors: '熱斑僅表示最熱格點的示意位置，非整車溫度場；圖例為分區峰值。拖動可旋轉。', vehicleFallback: '3D 無法顯示；2D 熱圖與平面圖仍可用。',
     tab: '車位監控', kicker: '控制室 · 停車場早期預警', title: '先看見異常，再決定下一步。',
     intro: 'B2 層 · 6 個充電位', simulation: '仿真演示', compressed: '演示時間已壓縮',
     limit: '合成溫度幀，非實測或物理模型結果；不進入實測記錄或匯出。',
@@ -42,7 +42,7 @@ const words = {
     frame: '幀', ruleNote: '規則來自服務端；上方車位狀態保留未結束告警。', processing: '處理中', downgraded: '已降級 · 觀察中'
   },
   en: {
-    vehicle3d: 'Bay 3D · Simulation', vehicleLimit: 'Schematic, not a real vehicle model', vehicleColors: 'Region maxima from available pixels. Neutral below the heat threshold; hot regions use the 2D palette. Drag to rotate.', vehicleFallback: '3D unavailable; the 2D heatmap and floor plan remain usable.',
+    vehicle3d: 'Bay 3D · Simulation', vehicleLimit: 'Schematic, not a real vehicle model', vehicleColors: 'The spot maps only the hottest pixel, not a whole-vehicle temperature field. The legend shows region peaks. Drag to rotate.', vehicleFallback: '3D unavailable; the 2D heatmap and floor plan remain usable.',
     tab: 'Bay monitor', kicker: 'CONTROL ROOM · EARLY WARNING', title: 'Spot the change. Decide the next step.',
     intro: 'Level B2 · 6 charging bays', simulation: 'Simulation demo', compressed: 'Demo time is compressed',
     limit: 'Synthetic temperature frames, not measurements or a physical model. Excluded from measured records and exports.',
@@ -101,6 +101,7 @@ document.querySelector('.view-tabs').after(view);
 const details = document.createElement('div'); details.className = 'cp-detail-content';
 details.innerHTML = `<div id="cpDetailNotice" class="cp-detail-notice" role="status" hidden></div><button id="cpDetailRetry" class="cp-button" type="button" data-cp="detailRetry" hidden></button>
   <div id="cpDetailEmpty" class="cp-detail-empty" data-cp="noFrame"></div>
+  <div id="cpVehicleEmptyStage"></div>
   <div id="cpFrameContent" hidden>
     <div class="cp-thermal-head"><h3 data-cp="thermalImage"></h3><span id="cpFrameStamp"></span></div>
     <div class="cp-frame-views"><div class="cp-flat-frame">
@@ -118,6 +119,11 @@ details.innerHTML = `<div id="cpDetailNotice" class="cp-detail-notice" role="sta
     <p class="cp-detail-small" data-cp="trendNote"></p>
   </div>`;
 $('cpSelectedOccupancy').after(details);
+// Keep the existing missing-frame 2D state while allowing an empty bay schematic.
+const vehiclePosition = document.createElement('div'); vehiclePosition.className = 'cp-flat-frame';
+$('cpVehicle3D').before(vehiclePosition); vehiclePosition.append($('cpVehicle3D'));
+const fallbackPosition = document.createElement('div');
+$('cpVehicleFallback').before(fallbackPosition); fallbackPosition.append($('cpVehicleFallback'));
 const decisionHost = document.createElement('div'); decisionHost.className = 'cp-decision-panel'; details.after(decisionHost);
 const operatorHost = document.createElement('div'); operatorHost.className = 'cp-operator'; view.querySelector('.cp-demo-banner').after(operatorHost);
 const reminderHost = document.createElement('div'); reminderHost.className = 'cp-reminder-controls';
@@ -171,20 +177,23 @@ function syncDetail() {
 }
 function selectBay(id) { selected = id; detailLoader.close(); render(); syncDetail(); }
 function renderVehicle(frame, detail, bay) {
-  const state = vehicleColors(frame?.temperaturesC, { occupied: Boolean(bay.occupied), noData: !connected || bay.noData || !detail || detail.summary.noData });
+  const state = vehicleColors(frame?.temperaturesC, { occupied: Boolean(bay.occupied), isCharging: Boolean(bay.isCharging), noData: !connected || bay.noData || !detail || detail.summary.noData });
+  const stage = frame ? vehiclePosition : $('cpVehicleEmptyStage'), fallbackStage = frame ? fallbackPosition : $('cpVehicleEmptyStage');
+  if ($('cpVehicle3D').parentElement !== stage) stage.append($('cpVehicle3D'));
+  if ($('cpVehicleFallback').parentElement !== fallbackStage) fallbackStage.append($('cpVehicleFallback'));
   const host = $('cpVehicleHost'); host.dataset.vehicle = String(state.visible); host.dataset.zoneColors = JSON.stringify(state.zones);
-  $('cpVehicle3D').hidden = !state.visible || vehicleFailed;
-  $('cpVehicleFallback').hidden = !state.visible || !vehicleFailed;
-  if (!state.visible) { vehicleModel?.dispose(); vehicleModel = null; host.replaceChildren(); host.dataset.frameSeq = ''; $('cpVehicleLegend').replaceChildren(); return; }
+  host.dataset.hotspot = JSON.stringify(state.hotspot);
+  $('cpVehicle3D').hidden = vehicleFailed;
+  $('cpVehicleFallback').hidden = !vehicleFailed;
   if (vehicleFailed) return;
   try {
     vehicleModel ??= createBayVehicle(host, { onFailure() { vehicleFailed = true; vehicleModel = null; host.replaceChildren(); $('cpVehicle3D').hidden = true; $('cpVehicleFallback').hidden = false; } });
-    vehicleModel.update(state, `${selected}, ${c().vehicle3d}, ${c().vehicleLimit}`); host.dataset.frameSeq = String(frame.seq);
+    vehicleModel.update(state, `${selected}, ${c().vehicle3d}, ${c().vehicleLimit}`); host.dataset.frameSeq = String(frame?.seq ?? '');
     $('cpVehicleLegend').replaceChildren();
     for (const [zone, reading] of Object.entries(state.zones)) {
       const item = document.createElement('span'); item.className = 'cp-vehicle-zone'; item.dataset.zone = zone;
       const swatch = document.createElement('i'); swatch.style.backgroundColor = reading.color; swatch.setAttribute('aria-hidden', 'true');
-      const label = document.createElement('span'); label.textContent = `${zoneLabels(zone, detail.bay.endFacingCamera)[bridge.language]} ${reading.peakC === null ? '—' : reading.peakC.toFixed(1) + '°C'}`;
+      const label = document.createElement('span'); label.textContent = `${zoneLabels(zone, detail?.bay.endFacingCamera ?? 'front')[bridge.language]} ${reading.peakC === null ? '—' : reading.peakC.toFixed(1) + '°C'}`;
       item.append(swatch, label); $('cpVehicleLegend').append(item);
     }
   } catch { vehicleFailed = true; vehicleModel?.dispose(); vehicleModel = null; host.replaceChildren(); $('cpVehicle3D').hidden = true; $('cpVehicleFallback').hidden = false; }
