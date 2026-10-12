@@ -50,6 +50,7 @@ test('independent validation rejects schema, unsafe instructions, numbers, inval
   assert.deepEqual(validateBayAIOutput(output(), 'warning', eligibleEvidence()), output());
   for (const change of [null, { ...output(), extra: true }, { ...output(), cause: 'fire' }, { ...output(), recommendation: 'close' },
     { ...output(), rationale_en: 'Read 60 degrees' }, { ...output(), rationale_en: 'Guaranteed safe' }, { ...output(), rationale_en: 'Disconnect power' },
+    { ...output(), rationale_en: 'Heat is in the authoritative region.' }, { ...output(), rationale_zh: '熱源屬權威區域。' },
     { ...output(), rationale_zh: '請拆卸電池' }, { ...output(), rationale_zh: 'x'.repeat(81) }, { ...output(), rationale_en: 'x'.repeat(301) },
     { ...output(), next_steps: [] }, { ...output(), next_steps: ['observe', 'observe'] }, { ...output(), next_steps: ['extinguish'] },
     { ...output(), next_steps: ['call_999'] }, { ...output(), cause: 'battery_zone_anomaly' }, { ...output(), cause: 'undetermined' }]) assert.throws(() => validateBayAIOutput(change, 'warning', eligibleEvidence()), BayAIError);
@@ -75,7 +76,8 @@ test('downgrade requires warning, non-underbody and both non-rising historical p
 test('production prompt includes all five conditions and leaves concentration to visual model judgment', () => {
   const { alert, detail } = evidence(), prepared = prepareBayAIInput(detail, alert);
   assert.ok(prepared.system.includes(BAY_AI_DOWNGRADE_INSTRUCTION));
-  for (const clause of ['(1)', '(2)', '(3)', '(4)', '(5)', 'judge from the image', 'small concentrated patch', 'not widespread', 'charging wheel hotspot']) assert.ok(prepared.system.includes(clause));
+  for (const clause of ['(1)', '(2)', '(3)', '(4)', '(5)', 'judge from the image', 'small concentrated patch', 'not widespread', 'charging wheel hotspot', 'control-room language', 'never copy internal identifiers']) assert.ok(prepared.system.includes(clause));
+  assert.equal(prepared.system.includes('authoritative'), false);
   assert.equal(JSON.parse(prepared.text).hotspotRegionId, detail.hotspot.zone);
 });
 
