@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { BayAIError } from './ai-provider.mjs';
-import { prepareBayAIInput, validateBayAIOutput } from './bay-ai-output.mjs';
+import { bayAIEvidence, prepareBayAIInput, validateBayAIOutput } from './bay-ai-output.mjs';
 
 export function publicAIRun(run) { const { rejectedOutput, ...safe } = run; return structuredClone(safe); }
 export function createBayAI({ provider, now = Date.now, clock = () => performance.now(), timeoutMs = 9000, onRun = () => {}, onChange = () => {} }) {
@@ -71,6 +71,18 @@ export function createBayAI({ provider, now = Date.now, clock = () => performanc
         else { fail(job, 'AI_TIMEOUT'); pump(); }
       }, Math.max(0, timeoutMs - (clock() - job.createdMono)));
       queue.push(job); pump();
+    },
+    refresh(alert, detail) {
+      if (closed || !enabled || alert?.status !== 'pending' || alert.sessionId !== sessionId || !detail?.frame) return false;
+      const previous = latest.get(alert.id);
+      // Lifecycle callbacks already requested this exact frame during ingestion.
+      if (!previous || detail.frame.seq <= previous.run.frameSeq) return false;
+      const sent = JSON.parse(previous.input.text), next = bayAIEvidence(detail, alert);
+      const gainedHistory = ['peak10SecondsAgoC', 'peak30SecondsAgoC'].some(key => sent[key] === null && Number.isFinite(next[key]));
+      const changedRegion = sent.hotspotRegionId !== next.hotspotRegionId;
+      const elapsed = Date.parse(detail.frame.capturedAt) - Date.parse(previous.run.frame.capturedAt);
+      if (!gainedHistory && !changedRegion && (!Number.isFinite(elapsed) || elapsed < 10000)) return false;
+      this.trigger(alert, detail); return true;
     },
     invalidate(alertId) { const job = latest.get(alertId); if (job) invalidate(job); },
     latest(alertId) {

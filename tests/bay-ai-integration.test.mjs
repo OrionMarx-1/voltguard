@@ -19,7 +19,7 @@ async function settle(f, bay) {
   assert.fail('AI test fixture did not settle');
 }
 
-test('only lifecycle events trigger AI; accepted suggestions store AI input separately from the operation frame', async () => {
+test('early frames do not duplicate lifecycle requests; accepted suggestions store AI input separately from the operation frame', async () => {
   const stub = createBayAIStub({ delayMs: 0 }); let calls = 0;
   const f = fixture({ ...stub, complete: args => { calls++; return stub.complete(args); } });
   try {
@@ -66,7 +66,9 @@ test('malicious provider always asks for downgrade: every A/B frame preserves da
     for (const [scenario, bay] of [['A', 'B2-03'], ['B', 'B2-02']]) {
       f.carpark.play({ name: scenario, ai: true });
       for (let t = 0; t <= 50; t++) {
-        if (t) f.tick(1); await settle(f, bay); const detail = f.carpark.detail(bay);
+        // Keep A an invalid-downgrade fixture: seven-second gaps never provide
+        // exact ten/thirty-second history. Continuous eligible A is tested below.
+        if (t) f.tick(scenario === 'A' ? 7 : 1); await settle(f, bay); const detail = f.carpark.detail(bay);
         if (detail.alert?.level === 'danger') {
           assert.equal(detail.ai.status, 'unavailable'); assert.equal(detail.ai.output, null); assert.equal(detail.ai.errorCode, 'AI_OUTPUT_DOWNGRADE_RULE');
           assert.throws(() => f.carpark.decide(detail.alert.id, choice('downgrade')), /DANGER_NO_DOWNGRADE/);
@@ -78,6 +80,28 @@ test('malicious provider always asks for downgrade: every A/B frame preserves da
         if (scenario === 'A' && detail.ai.status === 'available') f.carpark.decide(detail.alert.id, choice('downgrade', 'confirmed', detail.ai.id));
       }
     }
+  } finally { f.close(); }
+});
+
+test('pending A refreshes at simulation seconds ten, twenty and thirty with complete evidence; handled alerts stop frame requests', async () => {
+  const stub = createBayAIStub({ delayMs: 0 }), inputs = [];
+  const f = fixture({ ...stub, complete: args => { inputs.push(JSON.parse(args.text)); return stub.complete(args); } });
+  try {
+    f.carpark.play({ name: 'A', ai: true }); await settle(f, 'B2-03');
+    const first = f.carpark.detail('B2-03').ai;
+    assert.equal(inputs.length, 1); assert.equal(first.frameSeq, 1); assert.equal(first.output.recommendation, 'maintain');
+    f.carpark.tick(); await flush(); assert.equal(inputs.length, 1);
+    for (let t = 1; t <= 30; t++) { f.tick(1); await settle(f, 'B2-03'); assert.equal(inputs.length, 1 + Math.floor(t / 10), `A second ${t}`); }
+    const current = f.carpark.detail('B2-03');
+    assert.deepEqual(current.aiRuns.map(run => run.frameSeq), [1, 11, 21, 31]);
+    assert.equal(current.aiRuns.slice(0, 3).every(run => run.status === 'stale'), true);
+    assert.equal(current.ai.output.recommendation, 'downgrade'); assert.equal(current.alert.level, 'warning');
+    assert.equal(inputs.at(-1).peak10SecondsAgoC, 66); assert.equal(inputs.at(-1).peak30SecondsAgoC, 68);
+    assert.throws(() => f.carpark.decide(current.alert.id, choice('maintain', 'confirmed', first.id)), /AI_STALE/);
+    f.carpark.decide(current.alert.id, choice('downgrade', 'confirmed', current.ai.id));
+    f.tick(30); await flush(); assert.equal(inputs.length, 4);
+    f.carpark.play({ name: 'A', ai: false }); for (let t = 0; t < 31; t++) f.tick(1);
+    await flush(); assert.equal(inputs.length, 4);
   } finally { f.close(); }
 });
 

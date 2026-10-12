@@ -333,7 +333,7 @@ function render() {
   const detail = detailLoader.state.detail;
   const matches = detail?.bay.id === selected && detail?.session.id === snapshot?.session.id;
   decisionPanel.render({ sessionId: snapshot?.session.id ?? '', bayId: selected, config, alert: alerts.find(item => item.id === bay.alertId) ?? null,
-    decisions: matches ? detail.decisions : [], ai: matches ? detail.ai : null, aiRuns: matches ? detail.aiRuns : [], connected, busy, detailReady: Boolean(matches && detail.frame && !detailLoader.state.loading && !detailLoader.state.error) });
+    decisions: matches ? detail.decisions : [], ai: matches ? detail.ai : null, aiRuns: matches ? detail.aiRuns : [], currentFrameSeq: bay.frameSeq, connected, busy, detailReady: Boolean(matches && detail.frame && !detailLoader.state.loading && !detailLoader.state.error) });
   for (const id of ['cpScenarioA', 'cpScenarioB', 'cpReset']) $(id).disabled = busy || !connected;
   $('cpScenarioA').setAttribute('aria-pressed', String(snapshot?.session.scenario === 'A'));
   $('cpScenarioB').setAttribute('aria-pressed', String(snapshot?.session.scenario === 'B'));

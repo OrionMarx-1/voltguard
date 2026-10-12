@@ -36,10 +36,13 @@ try {
   assert.match(await page.locator('#cpAiStub').innerText(), /TEST STUB.*Not a real model/);
   assert.match(await page.locator('#cpAiRecommendation').innerText(), /Maintain.*Wheel residual/);
   assert.match(await page.locator('#cpAiHotspot').innerText(), /Front wheels/);
+  assert.match(await page.locator('#cpAiFrame').innerText(), /Frame used for AI analysis 1/);
   const initialRun = app.carpark.detail('B2-03').ai, callsBeforeLanguage = calls;
   await page.locator('#langButton').click(); assert.match(await page.locator('#cpAiRationale').innerText(), /測試替身/);
   await page.locator('#langButton').click(); assert.equal(calls, callsBeforeLanguage);
   tick(2); await page.waitForFunction(() => !document.querySelector('#cpAiConfirm').disabled);
+  await page.locator('#cpAiFrame[data-earlier="true"]').waitFor();
+  assert.match(await page.locator('#cpAiFrame').innerText(), /Explanation uses an earlier frame/);
   await page.locator('#cpAiConfirm').click(); assert.equal(await page.locator('#cpLevelmaintain').isChecked(), true);
   assert.equal(app.carpark.detail('B2-03').decisions.length, 0);
   await page.locator('#cpDecisionSubmit').click(); await count(1);
@@ -59,6 +62,20 @@ try {
   assert.equal(app.carpark.detail('B2-03').decisions[1].aiStance, 'rejected');
   await page.locator('#cpAiConfirm').click(); await page.locator('#cpLeveldowngrade').check(); await page.locator('#cpDecisionSubmit').click(); await count(3);
   assert.equal(app.carpark.detail('B2-03').decisions[2].aiStance, 'rejected');
+
+  await startA(); await available(); const beforeRefresh = app.carpark.detail('B2-03').ai;
+  // Test-only source clock advances; backend builds all exact history samples.
+  for (let second = 0; second < 30; second++) tick();
+  await page.waitForFunction(id => document.querySelector('#cpAiPanel').dataset.aiRunId && document.querySelector('#cpAiPanel').dataset.aiRunId !== id, beforeRefresh.id);
+  await available(); const refreshed = app.carpark.detail('B2-03');
+  assert.ok(refreshed.ai.frameSeq >= 31); assert.equal(refreshed.ai.output.recommendation, 'downgrade');
+  assert.equal(refreshed.aiRuns.find(run => run.id === beforeRefresh.id).status, 'stale');
+  assert.match(await page.locator('#cpAiRecommendation').innerText(), /Downgrade.*Wheel residual/);
+  assert.ok((await page.locator('#cpAiFrame').innerText()).includes(String(refreshed.ai.frameSeq)));
+  await page.locator('#cpAiConfirm').click(); assert.equal(await page.locator('#cpLeveldowngrade').isChecked(), true);
+  await page.locator('#cpDecisionSubmit').click(); await count(1);
+  assert.equal(app.carpark.detail('B2-03').decisions[0].aiStance, 'confirmed');
+  const handledCalls = calls; tick(10); await new Promise(resolve => setTimeout(resolve, 350)); assert.equal(calls, handledCalls);
 
   await page.locator('#cpAiToggle').uncheck(); const disabledCalls = calls;
   await page.locator('#cpScenarioA').click(); await bay('B2-03').click();

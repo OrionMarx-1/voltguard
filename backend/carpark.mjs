@@ -45,7 +45,13 @@ export function createDemoCarpark({ db, broadcast, now = Date.now, autoStart = t
     broadcast('ai', { sessionId: run.sessionId, bayId: run.bayId, alertId: run.alertId, runId: run.id, status: run.status, errorCode: run.errorCode, sourceType: 'simulation', exportable: false, testStub: run.testStub });
   } });
   const player = createSimulationPlayer({ now, setIntervalFn, clearIntervalFn,
-    onFrame: frame => monitor.ingestSimulation(frame),
+    onFrame(frame) {
+      monitor.ingestSimulation(frame);
+      if (session?.aiEnabled) {
+        const current = monitor.detail(frame.bayId);
+        ai.refresh(current.alert, current);
+      }
+    },
     onTick: () => broadcast('bays', { session: { ...session }, bays: monitor.summaries(), sourceType: 'simulation', exportable: false })
   });
   function newSession(scenario = null, aiRequested = true) {

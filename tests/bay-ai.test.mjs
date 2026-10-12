@@ -7,7 +7,7 @@ import { prepareBayAIInput, validateBayAIOutput, BAY_AI_SCHEMA, BAY_AI_DOWNGRADE
 import { bayFrameImage } from '../backend/frame-image.mjs';
 import { createBayMonitor } from '../backend/bays.mjs';
 import { normalizeDecision } from '../backend/bay-decisions.mjs';
-import { createAIWaitClock } from '../dist/carpark/ai-view.mjs';
+import { createAIWaitClock, aiFrameContext } from '../dist/carpark/ai-view.mjs';
 import { temperatureColor } from '../dist/thermal-map.mjs';
 
 const output = () => ({ cause: 'brake_residual_heat', recommendation: 'downgrade', rationale_zh: '輪區熱源分布較集中，建議持續觀察。', rationale_en: 'Heat is concentrated near the wheels. Continue observing.', next_steps: ['observe'] });
@@ -173,4 +173,54 @@ test('UI wait budget is bounded and cannot be extended by repeated reads or wall
   let time = 0; const read = createAIWaitClock(() => time), ai = { id: 'run', status: 'waiting', remainingMs: 9000, createdAt: '2099-01-01' };
   assert.equal(read(ai).status, 'waiting'); time = 8999; assert.equal(read(ai).status, 'waiting'); time = 9000; assert.equal(read({ ...ai, remainingMs: 9000 }).errorCode, 'AI_TIMEOUT');
   assert.equal(read({ ...ai, id: 'new' }).status, 'waiting'); time = 19001; assert.equal(read({ ...ai, id: 'new', remainingMs: 999999 }).status, 'unavailable');
+});
+
+test('new frames refresh only on gained history, changed region or ten source seconds, never on receipt-clock delay', async () => {
+  const { alert, detail } = evidence(); let wallTime = Date.now();
+  const ai = createBayAI({ provider: { configured: true, complete: async () => ({ json: { ...output(), recommendation: 'maintain' } }) }, now: () => wallTime });
+  const at = seconds => {
+    const next = structuredClone(detail); next.frame.seq += seconds * 1000;
+    next.frame.capturedAt = new Date(Date.parse(detail.frame.capturedAt) + seconds * 1000).toISOString(); return next;
+  };
+  try {
+    ai.reset('session', true); ai.trigger(alert, detail); await flush(); const initial = ai.latest(alert.id).id;
+    assert.equal(ai.refresh(alert, detail), false);
+    wallTime += 60000; assert.equal(ai.refresh(alert, at(1)), false);
+    const ten = at(1); ten.history.push({ capturedAt: '2026-10-09T00:00:21Z', peakC: 65 });
+    assert.equal(ai.refresh(alert, ten), true); await flush(); assert.notEqual(ai.latest(alert.id).id, initial);
+    const thirty = at(2); thirty.history.push({ capturedAt: '2026-10-09T00:00:22Z', peakC: 65 }, { capturedAt: '2026-10-09T00:00:02Z', peakC: 68 });
+    assert.equal(ai.refresh(alert, thirty), true); await flush();
+    const region = at(3); region.hotspot.zone = 'wheel'; region.hotspot.labels = { zh: '前輪', en: 'Front wheels' };
+    assert.equal(ai.refresh(alert, region), true); await flush();
+    const before = at(12.999); before.hotspot = region.hotspot;
+    assert.equal(ai.refresh(alert, before), false);
+    const exact = at(13); exact.hotspot = region.hotspot;
+    assert.equal(ai.refresh(alert, exact), true); await flush();
+    for (const status of ['processing', 'downgraded', 'closed']) assert.equal(ai.refresh({ ...alert, status }, at(30)), false);
+    ai.reset('session', false); assert.equal(ai.refresh(alert, at(30)), false);
+    ai.close(); assert.equal(ai.refresh(alert, at(30)), false);
+  } finally { ai.close(); }
+});
+
+test('refresh invalidates an in-flight result and serializes replacement work even if cancellation is ignored', async () => {
+  const { alert, detail } = evidence(), pending = [], persisted = [];
+  const ai = createBayAI({ provider: { configured: true, complete: args => new Promise(resolve => pending.push({ args, resolve })) }, onRun: run => persisted.push(run), timeoutMs: 1000 });
+  try {
+    ai.reset('session', true); ai.trigger(alert, detail); await flush(); const initial = ai.latest(alert.id).id;
+    const next = structuredClone(detail); next.frame.seq++; next.hotspot.zone = 'wheel';
+    assert.equal(ai.refresh(alert, next), true); await flush();
+    assert.equal(pending.length, 1); assert.equal(ai.activeCount, 1); assert.equal(pending[0].args.signal.aborted, true);
+    assert.equal(persisted.findLast(run => run.id === initial).status, 'stale');
+    pending[0].resolve({ json: { ...output(), recommendation: 'maintain' }, model: 'late' }); await flush();
+    assert.equal(pending.length, 2); assert.equal(ai.activeCount, 1); assert.equal(ai.latest(alert.id).status, 'waiting');
+    pending[1].resolve({ json: { ...output(), recommendation: 'maintain' }, model: 'fresh' }); await flush();
+    assert.equal(ai.latest(alert.id).model, 'fresh'); assert.equal(ai.latest(alert.id).frameSeq, next.frame.seq);
+  } finally { ai.close(); }
+});
+
+test('AI frame labels distinguish the analyzed frame from the latest bay summary without inventing a frame', () => {
+  assert.deepEqual(aiFrameContext({ frameSeq: 1 }, 31), { frameSeq: 1, earlier: true });
+  assert.deepEqual(aiFrameContext({ frameSeq: 31 }, 31), { frameSeq: 31, earlier: false });
+  assert.deepEqual(aiFrameContext({ frameSeq: 31 }, null), { frameSeq: 31, earlier: false });
+  for (const ai of [null, {}, { frameSeq: NaN }]) assert.deepEqual(aiFrameContext(ai, 31), { frameSeq: null, earlier: false });
 });

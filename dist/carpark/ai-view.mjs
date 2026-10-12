@@ -23,9 +23,16 @@ export function createAIWaitClock(now = () => performance.now()) {
   };
 }
 
+export function aiFrameContext(ai, currentFrameSeq) {
+  return { frameSeq: Number.isSafeInteger(ai?.frameSeq) ? ai.frameSeq : null,
+    earlier: Number.isSafeInteger(ai?.frameSeq) && Number.isSafeInteger(currentFrameSeq) && ai.frameSeq < currentFrameSeq };
+}
+
 export function createAIView({ host, language, onChoose }) {
   host.innerHTML = '<h3 id="cpAiTitle"></h3><p id="cpAiStub" class="cp-ai-stub" hidden></p><p id="cpAiUnavailable" role="status" class="cp-detail-small"></p><div id="cpAiOutput" hidden><strong id="cpAiRecommendation"></strong><p id="cpAiRationale"></p><p id="cpAiSteps" class="cp-detail-small"></p><p id="cpAiHotspot" class="cp-detail-small"></p><p id="cpAiLimit" class="cp-detail-small"></p><div class="cp-ai-actions"><button id="cpAiConfirm" class="cp-button" type="button"></button><button id="cpAiReject" class="cp-button" type="button"></button></div></div><details id="cpAiHistory"><summary id="cpAiHistoryTitle"></summary><div id="cpAiRuns"></div></details>';
   const $ = id => host.querySelector(`#${id}`), wait = createAIWaitClock();
+  const frameStamp = document.createElement('p'); frameStamp.id = 'cpAiFrame'; frameStamp.className = 'cp-detail-small'; frameStamp.hidden = true;
+  $('cpAiTitle').after(frameStamp);
   let current = null, historyKey = '';
   const node = (tag, text) => { const element = document.createElement(tag); if (text !== undefined) element.textContent = text; return element; };
   $('cpAiConfirm').addEventListener('click', () => current && onChoose('confirmed', current));
@@ -38,6 +45,9 @@ export function createAIView({ host, language, onChoose }) {
     const code = matches ? ai.errorCode : next.ai?.errorCode || 'AI_STALE';
     host.dataset.aiStatus = current ? 'available' : waiting ? 'waiting' : 'unavailable';
     host.dataset.aiRunId = current?.id ?? '';
+    const frameContext = aiFrameContext(matches ? ai : null, next.currentFrameSeq);
+    frameStamp.hidden = frameContext.frameSeq === null; frameStamp.dataset.earlier = String(frameContext.earlier);
+    frameStamp.textContent = frameContext.frameSeq === null ? '' : `${c.frame} ${frameContext.frameSeq}${frameContext.earlier ? (language() === 'zh' ? ' · 說明基於較早畫面' : ' · Explanation uses an earlier frame') : ''}`;
     $('cpAiTitle').textContent = c.title; $('cpAiStub').hidden = !ai?.testStub; $('cpAiStub').textContent = c.stub;
     $('cpAiUnavailable').hidden = Boolean(current); $('cpAiUnavailable').textContent = waiting ? c.waiting : `${c.unavailable} · ${c[code] ?? (code?.startsWith('AI_OUTPUT') ? c.invalid : c.AI_UNAVAILABLE)}`;
     $('cpAiOutput').hidden = !current; $('cpAiConfirm').disabled = !current || !next.detailReady || next.busy; $('cpAiReject').disabled = !current || !next.detailReady || next.busy;

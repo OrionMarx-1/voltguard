@@ -26,10 +26,13 @@ export function validateBayAIOutput(output, level, evidence) {
   if (output.next_steps.includes('call_999') && output.recommendation !== 'escalate') fail('AI_OUTPUT_CALL');
   return structuredClone(output);
 }
-export function prepareBayAIInput(detail, alert) {
+export function bayAIEvidence(detail, alert) {
   const at = Date.parse(detail.frame.capturedAt), past = seconds => detail.history.find(item => Date.parse(item.capturedAt) === at - seconds * 1000)?.peakC ?? null;
-  const evidence = { hotspotRegion: detail.hotspot?.labels ?? null, hotspotRegionId: detail.hotspot?.zone ?? null, peakC: detail.assessment.peakC, peak10SecondsAgoC: past(10), peak30SecondsAgoC: past(30), riseCPerS: detail.assessment.riseCPerS,
+  return { hotspotRegion: detail.hotspot?.labels ?? null, hotspotRegionId: detail.hotspot?.zone ?? null, peakC: detail.assessment.peakC, peak10SecondsAgoC: past(10), peak30SecondsAgoC: past(30), riseCPerS: detail.assessment.riseCPerS,
     cellsAbove60C: detail.frame.temperaturesC.flat().filter(value => value !== null && value > 60).length, ruleLevel: detail.assessment.thermal, alertLevel: alert.level, isChargingBay: detail.bay.charging, isCharging: detail.summary.isCharging };
+}
+export function prepareBayAIInput(detail, alert) {
+  const evidence = bayAIEvidence(detail, alert);
   return { system: 'Return only a JSON object matching the supplied schema. Explain the hotspot shape and distribution, temperature trend and charging context to a control-room operator. The supplied hotspot region is computed from installation geometry and is authoritative; do not guess a different location. Never downgrade a danger alert, a battery-zone anomaly or an undetermined cause. Return Traditional Chinese and English rationales together; no digits, safety guarantees, firefighting, disconnecting power, ventilation or disassembly instructions. Next steps are operator choices only. Do not declare a fire or claim certainty. The image covers only the outward-facing vehicle end at an angle across the aisle. Missing pixels and absent past samples are missing evidence, not normal results. ' + BAY_AI_DOWNGRADE_INSTRUCTION + ' ' + BAY_AI_RATIONALE_INSTRUCTION,
     text: JSON.stringify(evidence), imagePng: bayFrameImage(detail.frame.temperaturesC), schema: BAY_AI_SCHEMA };
 }
