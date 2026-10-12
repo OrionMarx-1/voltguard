@@ -35,3 +35,12 @@
 - `qa-carpark`、`qa-carpark-decisions`、`qa-carpark-ai`、`qa-navigation` 和 `qa-carpark-reminders` 最终均输出 `ok: true`。浏览器截图只存放在忽略的 `.sites-runtime/`。
 - 计时独立入口由单元测试在禁用 `fetch` 和 `loadEnvFile` 的保护下执行，实际生成的是替身报告。没有执行真实模型评估或真实超时诊断。
 - 第一阶段技术设计、演示文稿、发布、商业与订阅、数据清理和本地模型均未改动。
+
+## 下一轮（2026-10-12，尚未执行）
+
+用户已授权同时做两件事，规格见 [TECH_DESIGN_PHASE2.md](TECH_DESIGN_PHASE2.md) 第 5 节：
+
+1. **自行走查**（PRD 13.4）：场景 A/B × AI 开/关，加上 B2-06 无数据和提醒音；记录到 `docs/PHASE2_WALKTHROUGH.md`。不得写成用户测试。
+2. **真实模型重新评估**（第 1.3 节）：把反例帧并入 `live-bay-ai-check`，`--repeats=1`；保留 10 月 10 日报告，新旧并列写入 `BAY_AI_LIVE_CHECK.md`。
+
+不做第 2 节的真实超时排查，不做演示文稿或仓库发布。
