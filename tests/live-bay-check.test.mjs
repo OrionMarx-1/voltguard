@@ -8,11 +8,63 @@ import { fileURLToPath } from 'node:url';
 import { loadLocalEnv } from '../backend/local-env.mjs';
 import { createAIProvider, BayAIError } from '../backend/ai-provider.mjs';
 import { prepareBayAIInput, validateBayAIOutput, BAY_AI_RATIONALE_INSTRUCTION } from '../backend/bay-ai-output.mjs';
-import { buildBayCheckCases, buildBayDowngradeCounterexamples, prepareBayCheckInput, runLiveBayCheck, summarizeBayChecks, saveBayCheckReport } from '../scripts/live-bay-ai-check.mjs';
+import { buildBayCheckCases, buildBayCheckPlan, buildBayDowngradeCounterexamples, prepareBayCheckInput, runLiveBayCheck, summarizeBayChecks, saveBayCheckReport } from '../scripts/live-bay-ai-check.mjs';
+import { SCENARIOS } from '../backend/sim/scenarios.mjs';
 
 const samples = buildBayCheckCases();
 const reply = expected => ({ ...expected, rationale_zh: '熱源分布仍需由現場人員核實。', rationale_en: 'The heat distribution requires a site inspection.', next_steps: ['observe'] });
 const noKey = createAIProvider({ apiKey: '', enabled: false, fetchImpl: () => assert.fail('No real call allowed') });
+
+test('live plan retains all five exact base cases and appends two test-only counterexamples without changing the player', () => {
+  const plan = buildBayCheckPlan();
+  // Each independent monitor generates a UUID. Assert its integrity, then
+  // normalize only that identifier before comparing every evidence field.
+  const normalized = cases => cases.map(sample => {
+    const copy = structuredClone(sample), id = copy.detail.alert.id;
+    assert.match(id, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    assert.equal(copy.detail.summary.alertId, id);
+    copy.detail.alert.id = 'normalized-test-alert'; copy.detail.summary.alertId = 'normalized-test-alert'; return copy;
+  });
+  assert.equal(plan.length, 7); assert.deepEqual(normalized(plan.slice(0, 5)), normalized(samples));
+  assert.deepEqual(plan.map(sample => [sample.scenario, sample.second, Boolean(sample.testOnly)]), [
+    ['A', 0, false], ['A', 30, false], ['A', 60, false], ['B', 28, false], ['B', 42, false], ['rising_wheel', 30, true], ['cooling_underbody', 30, true]]);
+  assert.deepEqual(plan.slice(5).map(sample => sample.expected.recommendation), ['not_downgrade', 'not_downgrade']);
+  assert.deepEqual(Object.keys(SCENARIOS), ['A', 'B']);
+  for (const sample of plan.slice(5)) {
+    const formal = prepareBayCheckInput(sample, 'formal');
+    assert.equal(JSON.parse(formal.text).isChargingBay, true);
+    for (const hidden of ['testOnly', sample.scenario, 'not_downgrade']) assert.equal((formal.system + formal.text).includes(hidden), false);
+  }
+});
+
+test('single-repeat default plan makes fourteen fixture calls and separately labels both counterexample groups', async () => {
+  const plan = buildBayCheckPlan(); let calls = 0; const progress = [];
+  const report = await runLiveBayCheck({ repeats: 1, provider: { configured: true, kind: 'test_stub', model: 'fixture', async complete() {
+    const sample = plan[Math.floor(calls++ / 2)];
+    return { json: reply({ ...sample.expected, recommendation: sample.testOnly ? 'maintain' : sample.expected.recommendation }), model: 'fixture' };
+  } }, onProgress: row => progress.push(row) });
+  assert.equal(calls, 14); assert.equal(report.plannedChecks, 14); assert.equal(report.attemptedCalls, 14); assert.equal(report.completed, true); assert.equal(report.ok, true);
+  assert.deepEqual(report.rows.map(row => [row.scenario, row.group, row.testOnly]), plan.flatMap(sample => ['formal', 'image_only'].map(group => [sample.scenario, group, Boolean(sample.testOnly)])));
+  assert.equal(progress.filter(row => row.testOnly).length, 4);
+  assert.equal(report.summary.formal.total, 7); assert.equal(report.summary.image_only.total, 7);
+});
+
+test('counterexample prohibition accepts maintain or escalate but never downgrade, without relaxing base-case expectations', async () => {
+  const cases = buildBayCheckPlan().slice(5);
+  for (const recommendation of ['maintain', 'escalate', 'downgrade']) {
+    const report = await runLiveBayCheck({ cases, repeats: 1, provider: { configured: true, kind: 'test_stub', async complete() {
+      return { json: reply({ cause: 'brake_residual_heat', recommendation }), model: 'fixture' };
+    } } });
+    if (recommendation === 'downgrade') {
+      assert.equal(report.rows.every(row => !row.ok && row.output === null && row.errorCode === 'AI_OUTPUT_DOWNGRADE_RULE' && !row.recommendationMatch), true);
+    } else {
+      assert.equal(report.rows.every(row => row.ok && row.recommendationMatch), true);
+      assert.equal(report.rows.filter(row => row.scenario === 'cooling_underbody').every(row => !row.causeMatch && !row.expectedMatch), true);
+    }
+  }
+  const base = await runLiveBayCheck({ cases: [samples[1]], repeats: 1, provider: { configured: true, kind: 'test_stub', complete: async () => ({ json: reply({ cause: 'brake_residual_heat', recommendation: 'maintain' }), model: 'fixture' }) } });
+  assert.equal(base.rows.every(row => row.ok && !row.recommendationMatch && !row.expectedMatch), true);
+});
 
 test('counterexamples are test-only charging-bay frames and cannot authorize downgrade', () => {
   const cases = buildBayDowngradeCounterexamples();

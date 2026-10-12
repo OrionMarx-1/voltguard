@@ -42,6 +42,12 @@ export function buildBayDowngradeCounterexamples() {
   });
 }
 
+export function buildBayCheckPlan() {
+  return [...buildBayCheckCases(), ...buildBayDowngradeCounterexamples().map(sample => ({ ...sample,
+    // These counterexamples test a prohibition, not a mandatory maintain answer.
+    expected: { ...sample.expected, recommendation: 'not_downgrade' } }))];
+}
+
 export function prepareBayCheckInput(sample, group) {
   if (!groups.includes(group)) throw new Error('CHECK_GROUP');
   const input = prepareBayAIInput(sample.detail, sample.detail.alert);
@@ -64,7 +70,7 @@ export function summarizeBayChecks(rows) {
     errors: rows.filter(row => !row.ok).reduce((all, row) => { all[row.errorCode] = (all[row.errorCode] ?? 0) + 1; return all; }, {}) };
 }
 
-export async function runLiveBayCheck({ provider, repeats = 3, cases = buildBayCheckCases(), execution = 'test_fixture', timeoutMs = 9000, clock = () => performance.now(), onProgress = () => {} }) {
+export async function runLiveBayCheck({ provider, repeats = 3, cases = buildBayCheckPlan(), execution = 'test_fixture', timeoutMs = 9000, clock = () => performance.now(), onProgress = () => {} }) {
   if (!Number.isInteger(repeats) || repeats < 1 || repeats > 10) throw new Error('CHECK_REPEATS');
   if (!['real_provider', 'test_fixture'].includes(execution)) throw new Error('CHECK_EXECUTION');
   const report = { schemaVersion: 'voltguard-bay-ai-evaluation-1', checkedAt: new Date().toISOString(), execution, sourceType: 'simulation', exportable: false,
@@ -76,7 +82,7 @@ export async function runLiveBayCheck({ provider, repeats = 3, cases = buildBayC
   // group nor let one slow response consume a later sample's own budget.
   for (const sample of cases) for (let iteration = 1; iteration <= repeats; iteration++) for (const group of groups) {
     const started = clock(), controller = new AbortController(); let timer;
-    const row = { scenario: sample.scenario, second: sample.second, iteration, group, frameSeq: sample.detail.frame.seq, ruleLevel: sample.detail.alert.level,
+    const row = { scenario: sample.scenario, second: sample.second, iteration, group, testOnly: Boolean(sample.testOnly), frameSeq: sample.detail.frame.seq, ruleLevel: sample.detail.alert.level,
       expected: sample.expected, model: provider.model ?? null, latencyMs: 0, ok: false, errorCode: null, output: null, causeMatch: false, recommendationMatch: false, expectedMatch: false,
       responseFormat: null, requests: null };
     try {
@@ -93,11 +99,12 @@ export async function runLiveBayCheck({ provider, repeats = 3, cases = buildBayC
       row.rejectedOutput = result.json;
       row.output = validateBayAIOutput(result.json, row.ruleLevel, sentEvidence); row.ok = true;
       delete row.rejectedOutput;
-      row.causeMatch = row.output.cause === sample.expected.cause; row.recommendationMatch = row.output.recommendation === sample.expected.recommendation;
+      row.causeMatch = row.output.cause === sample.expected.cause;
+      row.recommendationMatch = sample.expected.recommendation === 'not_downgrade' ? row.output.recommendation !== 'downgrade' : row.output.recommendation === sample.expected.recommendation;
       row.expectedMatch = row.causeMatch && row.recommendationMatch;
     } catch (error) { row.errorCode = error instanceof BayAIError ? error.code : 'AI_UNAVAILABLE'; }
     finally { clearTimeout(timer); row.latencyMs = Math.round(Math.max(0, clock() - started)); }
-    report.rows.push(row); onProgress({ completed: report.rows.length, planned: report.plannedChecks, group, scenario: row.scenario, second: row.second, ok: row.ok, expectedMatch: row.expectedMatch, errorCode: row.errorCode, latencyMs: row.latencyMs });
+    report.rows.push(row); onProgress({ completed: report.rows.length, planned: report.plannedChecks, group, scenario: row.scenario, testOnly: row.testOnly, second: row.second, ok: row.ok, expectedMatch: row.expectedMatch, errorCode: row.errorCode, latencyMs: row.latencyMs });
   }
   report.completed = true;
   report.summary = Object.fromEntries(groups.map(group => [group, summarizeBayChecks(report.rows.filter(row => row.group === group))]));
