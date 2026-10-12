@@ -66,6 +66,9 @@ try {
   assert.equal(await page.locator('#cpAiToggle').isDisabled(), true);
   await overflow(page);
   await waitDetail('B2-02');
+  await page.locator('#cpVehicle3D:not([hidden]) .cp-vehicle-canvas').waitFor();
+  assert.match(await page.locator('#cpVehicle3D').innerText(), /Schematic, not a real vehicle model/);
+  assert.equal(await page.locator('#cpThermalImage').isVisible(), true);
   assert.equal(await page.locator('#cpThermalImage').evaluate(canvas => [canvas.width, canvas.height].join('×')), '256×192');
   assert.ok(detailReads.every(route => route === '/api/bays/B2-02'));
   await capture('carpark-baseline-en.png');
@@ -76,6 +79,7 @@ try {
   await page.keyboard.press('ArrowRight');
   assert.equal(await bay('B2-03').evaluate(element => element === document.activeElement), true);
   assert.equal(await page.locator('#cpSelectedId').innerText(), 'B2-03');
+  await waitDetail('B2-03'); assert.equal(await page.locator('#cpVehicle3D').isVisible(), false);
   step(); await page.waitForFunction(() => document.querySelector('[data-bay="B2-03"]').dataset.frameSeq === '3');
   assert.equal(await bay('B2-03').evaluate(element => element === document.activeElement), true);
 
@@ -89,6 +93,9 @@ try {
   assert.equal(await page.locator('#cpScenarioA').getAttribute('aria-pressed'), 'true');
   assert.equal(app.carpark.snapshot().session.aiRequested, false);
   await checkHotspot('B2-03', 'wheel'); assert.match(await page.locator('#cpHotspot').innerText(), /Front wheels/);
+  await page.locator('#cpVehicle3D:not([hidden]) .cp-vehicle-canvas').waitFor();
+  const wheelColors = JSON.parse(await page.locator('#cpVehicleHost').getAttribute('data-zone-colors'));
+  assert.equal(wheelColors.wheel.color, temperatureColor(app.carpark.detail('B2-03').hotspot.temperatureC));
   assert.equal(await page.locator('#cpRuleLevel').innerText(), 'Warning');
   assert.equal(await page.locator('#cpRiseRate').innerText(), '0.00 °C/s');
   assert.equal(await page.locator('#cpTrend').getAttribute('data-samples'), '2');
@@ -155,6 +162,9 @@ try {
   assert.equal(await page.locator('#cpSelectedPanel').getAttribute('data-detail-bay'), 'B2-02');
   assert.equal(await page.locator('#cpThermalImage').getAttribute('data-region'), 'underbody');
   await bay('B2-06').click(); await waitDetail('B2-06');
+  assert.equal(await page.locator('#cpVehicle3D').isVisible(), false);
+  assert.equal(await page.locator('.cp-vehicle-canvas').count(), 0);
+  assert.equal(await page.locator('#cpVehicleHost').getAttribute('data-vehicle'), 'false');
   assert.equal(await page.locator('#cpFrameContent').isVisible(), false);
   assert.equal(await page.locator('#cpDetailEmpty').isVisible(), true);
   await bay('B2-02').click(); await waitDetail('B2-02');
