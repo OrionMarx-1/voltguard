@@ -1,6 +1,7 @@
 import { drawBayFrame } from './detail-render.mjs';
 import { hotspotRegion } from './layout.mjs';
 import { createAIView } from './ai-view.mjs';
+import { escalateActionLabel } from './operator-copy.mjs';
 
 const words = {
   zh: { operator: '值班員名稱或代號', unverified: '未驗證身份 · 1–20 字', placeholder: '例如 P1', title: '保安決定',
@@ -70,7 +71,7 @@ export function createDecisionPanel({ host, operatorHost, language, request, onS
     }
     operatorHost.querySelector('#cpOperatorLabel').textContent = c().operator;
     operatorHost.querySelector('#cpOperatorNote').textContent = c().unverified; operator.placeholder = c().placeholder;
-    host.querySelectorAll('[data-dp]').forEach(element => { element.textContent = c()[element.dataset.dp]; });
+    host.querySelectorAll('[data-dp]').forEach(element => { element.textContent = element.dataset.dp === 'escalate' ? escalateActionLabel(alert?.level, language() === 'zh') : c()[element.dataset.dp]; });
     for (const [id, text] of Object.entries({ cpDecisionTitle: c().title, cpNoActiveAlert: c().noAlert,
       cpLevelLegend: c().level, cpExtrasLegend: c().extras, cpDangerLock: c().dangerLock, cpRecordOnly: c().recordOnly,
       cpDangerGuidance: c().emergency, cpCall999: c().callLink, cpDecisionHistoryTitle: c().history, cpHistoryLabel: c().simulation })) $(id).textContent = text;
@@ -93,7 +94,7 @@ export function createDecisionPanel({ host, operatorHost, language, request, onS
     if (!records.length) { $('cpDecisionHistory').append(node('p', c().noHistory, 'cp-detail-small')); return; }
     for (const record of [...records].reverse()) {
       const entry = node('details', undefined, 'cp-decision-record'); entry.dataset.decisionId = record.id;
-      entry.append(node('summary', `${record.operator} · ${c()[record.level] ?? c().extrasOnly} · ${new Date(record.at).toLocaleTimeString(language() === 'zh' ? 'zh-HK' : 'en-GB', { hour12: false })}`));
+      entry.append(node('summary', `${record.operator} · ${record.level === 'escalate' ? escalateActionLabel(record.levelBefore, language() === 'zh') : (c()[record.level] ?? c().extrasOnly)} · ${new Date(record.at).toLocaleTimeString(language() === 'zh' ? 'zh-HK' : 'en-GB', { hour12: false })}`));
       entry.append(node('p', `${c().unverified} · ${c().simulation}`, 'cp-detail-small'));
       entry.append(node('p', `${record.levelBefore === 'danger' ? (language() === 'zh' ? '危險' : 'Danger') : (language() === 'zh' ? '警告' : 'Warning')} → ${record.levelAfter === 'danger' ? (language() === 'zh' ? '危險' : 'Danger') : (language() === 'zh' ? '警告' : 'Warning')}`, 'cp-detail-small'));
       const stance = record.aiStance === 'none' ? c().aiNone : language() === 'zh' ? (record.aiStance === 'confirmed' ? '採用 AI 建議' : '拒絕 AI 建議') : (record.aiStance === 'confirmed' ? 'AI suggestion accepted' : 'AI suggestion rejected');

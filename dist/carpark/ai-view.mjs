@@ -1,5 +1,6 @@
 import { drawBayFrame } from './detail-render.mjs';
 import { zoneLabels } from './layout.mjs';
+import { escalateActionLabel, aiUnavailableMessage } from './operator-copy.mjs';
 
 const words = {
   zh: { title: 'AI 說明', stub: '測試替身 · 預設輸出 · 非真實模型', waiting: '正在等待 AI 說明…', unavailable: 'AI 說明不可用 · 請直接選擇級別',
@@ -49,11 +50,11 @@ export function createAIView({ host, language, onChoose }) {
     frameStamp.hidden = frameContext.frameSeq === null; frameStamp.dataset.earlier = String(frameContext.earlier);
     frameStamp.textContent = frameContext.frameSeq === null ? '' : `${c.frame} ${frameContext.frameSeq}${frameContext.earlier ? (language() === 'zh' ? ' · 說明基於較早畫面' : ' · Explanation uses an earlier frame') : ''}`;
     $('cpAiTitle').textContent = c.title; $('cpAiStub').hidden = !ai?.testStub; $('cpAiStub').textContent = c.stub;
-    $('cpAiUnavailable').hidden = Boolean(current); $('cpAiUnavailable').textContent = waiting ? c.waiting : `${c.unavailable} · ${c[code] ?? (code?.startsWith('AI_OUTPUT') ? c.invalid : c.AI_UNAVAILABLE)}`;
+    $('cpAiUnavailable').hidden = Boolean(current); $('cpAiUnavailable').textContent = aiUnavailableMessage({ waiting, code, zh: language() === 'zh' });
     $('cpAiOutput').hidden = !current; $('cpAiConfirm').disabled = !current || !next.detailReady || next.busy; $('cpAiReject').disabled = !current || !next.detailReady || next.busy;
     $('cpAiConfirm').textContent = c.confirm; $('cpAiReject').textContent = c.reject;
     if (current) {
-      $('cpAiRecommendation').textContent = `${c[current.output.recommendation]} · ${c[current.output.cause]}`;
+      $('cpAiRecommendation').textContent = `${current.output.recommendation === 'escalate' ? escalateActionLabel(next.alert?.level, language() === 'zh') : c[current.output.recommendation]} · ${c[current.output.cause]}`;
       $('cpAiRationale').textContent = current.output[`rationale_${language()}`];
       $('cpAiSteps').textContent = current.output.next_steps.map(step => c[step]).join(' / ');
       $('cpAiHotspot').textContent = `${c.hotspot}: ${current.hotspot?.labels?.[language()] ?? '—'}`;

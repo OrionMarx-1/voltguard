@@ -90,19 +90,23 @@ try {
       await page.locator('#cpAiPanel[data-ai-status="waiting"]').waitFor();
       assert.equal(await page.locator('#cpLevelmaintain').isEnabled(), true);
     }
-    await page.waitForFunction(() => document.querySelector('#cpAiPanel').dataset.aiStatus === 'unavailable' && /Model refused|validation|timed out/.test(document.querySelector('#cpAiUnavailable').textContent));
+    await page.waitForFunction(() => document.querySelector('#cpAiPanel').dataset.aiStatus === 'unavailable' && /Look at the thermal image/.test(document.querySelector('#cpAiUnavailable').textContent));
+    assert.equal((await page.locator('#cpAiUnavailable').innerText()).includes('validation'), false);
     assert.equal(await page.locator('#cpAiOutput').isVisible(), false); assert.equal(await page.locator('#cpAiConfirm').isDisabled(), true);
     await page.locator('#cpLevelmaintain').check(); await page.locator('#cpDecisionSubmit').click(); await count(1);
     assert.equal(app.carpark.detail('B2-03').decisions[0].aiStance, 'none');
   }
   await capture('ai-unavailable-en.png');
   mode = 'success'; await page.locator('#cpScenarioB').click(); tick(28); await bay('B2-02').click(); await available();
-  assert.match(await page.locator('#cpAiRecommendation').innerText(), /Escalate.*Underbody anomaly/);
+  assert.match(await page.locator('#cpAiRecommendation').innerText(), /Escalate to danger.*Underbody anomaly/);
   assert.equal(app.carpark.detail('B2-02').alert.level, 'warning');
+  assert.ok(await page.evaluate(() => document.querySelector('#cpAiPanel').getBoundingClientRect().top < document.querySelector('#cpThermalImage').getBoundingClientRect().top));
+  assert.match(await page.locator('[data-dp="escalate"]').innerText(), /Escalate to danger/);
   await page.locator('#cpAiConfirm').click(); assert.equal(await page.locator('#cpLevelescalate').isChecked(), true);
   assert.equal(await page.locator('#cpExtra_dispatch_patrol').isChecked(), true); assert.equal(await page.locator('#cpExtra_notify_manager').isChecked(), true);
   await page.locator('#cpDecisionSubmit').click(); await count(1); await available();
   assert.equal(await page.locator('#cpLeveldowngrade').isDisabled(), true);
+  assert.match(await page.locator('[data-dp="escalate"]').innerText(), /Record as danger/);
   await page.locator('#langButton').click(); await page.setViewportSize({ width: 390, height: 844 });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false); await capture('ai-danger-stub-zh-mobile.png');
   await page.locator('#langButton').click(); assert.equal(await page.locator('#carparkView').evaluate(element => /[\u3400-\u9fff]/.test(element.innerText)), false);

@@ -118,13 +118,14 @@ details.innerHTML = `<div id="cpDetailNotice" class="cp-detail-notice" role="sta
     <h3 class="cp-trend-title" data-cp="trend"></h3><svg id="cpTrend" viewBox="0 0 300 110" role="img"></svg>
     <p class="cp-detail-small" data-cp="trendNote"></p>
   </div>`;
-$('cpSelectedOccupancy').after(details);
+const decisionHost = document.createElement('div'); decisionHost.className = 'cp-decision-panel';
+$('cpSelectedOccupancy').after(decisionHost);
+decisionHost.after(details);
 // Keep the existing missing-frame 2D state while allowing an empty bay schematic.
 const vehiclePosition = document.createElement('div'); vehiclePosition.className = 'cp-flat-frame';
 $('cpVehicle3D').before(vehiclePosition); vehiclePosition.append($('cpVehicle3D'));
 const fallbackPosition = document.createElement('div');
 $('cpVehicleFallback').before(fallbackPosition); fallbackPosition.append($('cpVehicleFallback'));
-const decisionHost = document.createElement('div'); decisionHost.className = 'cp-decision-panel'; details.after(decisionHost);
 const operatorHost = document.createElement('div'); operatorHost.className = 'cp-operator'; view.querySelector('.cp-demo-banner').after(operatorHost);
 const reminderHost = document.createElement('div'); reminderHost.className = 'cp-reminder-controls';
 reminderHost.innerHTML = '<button id="cpReminderEnable" class="cp-button" type="button"></button><button id="cpGlobalMute" class="cp-button" type="button" aria-pressed="false"></button><span id="cpReminderState" role="status"></span>';
