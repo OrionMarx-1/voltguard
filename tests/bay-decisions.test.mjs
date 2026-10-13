@@ -22,7 +22,8 @@ function fixture(onDecision) {
 
 test('manual downgrade keeps warning severity, extras only keep pending, and every operation captures independent current evidence', () => {
   const f = fixture(); f.send(60, 0);
-  f.decide(choice(null, ['dispatch_patrol'])); assert.equal(f.monitor.alerts()[0].status, 'pending');
+  f.decide(choice(null, ['dispatch_patrol', 'request_closeup'])); assert.equal(f.monitor.alerts()[0].status, 'pending');
+  assert.deepEqual(f.records[0].record.extras, ['dispatch_patrol', 'request_closeup']);
   f.decide(choice('downgrade')); assert.equal(f.monitor.alerts()[0].status, 'downgraded');
   assert.equal(f.monitor.detail('B2-02').summary.status, 'warning'); assert.equal(f.monitor.detail('B2-02').summary.alertStatus, 'downgraded');
   f.send(60, 1); f.at(1.1); f.decide(choice('maintain', ['notify_manager']));

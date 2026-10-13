@@ -22,7 +22,9 @@ test('injected clock emits exactly five frames per second, skips duplicates, res
   clock += 10000; player.tick();
   assert.deepEqual(frames.slice(-5).find(frame => frame.bayId === 'B2-03').temperaturesC, lastA.temperaturesC);
   assert.equal(lastA.temperaturesC[19][5], 62);
-  assert.throws(() => player.reset('C'), /SIMULATION_SCENARIO/);
+  player.reset('C');
+  assert.equal(frames.slice(-5).find(frame => frame.bayId === 'B2-04').temperaturesC[19][8], 65);
+  assert.throws(() => player.reset('D'), /SIMULATION_SCENARIO/);
 });
 
 test('source timestamps resist timer jitter and do not fabricate danger rates near the B transition', () => {

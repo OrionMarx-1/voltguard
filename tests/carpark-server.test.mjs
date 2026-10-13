@@ -32,6 +32,7 @@ test('carpark APIs expose six bays, one permanently missing feed, compact summar
     assert.deepEqual(state.bays.filter(bay => bay.noData).map(bay => bay.id), ['B2-06']);
     assert.equal(JSON.stringify(state.bays).includes('temperaturesC'), false);
     const detail = await f.get('/api/bays/B2-02');
+    assert.deepEqual(detail.followups, { closeup: null, patrol: null });
     assert.equal(detail.frame.temperaturesC.length, 24); assert.equal(detail.frame.temperaturesC[0].length, 32);
     assert.equal(detail.history.length, 2); assert.equal(detail.frame.sourceType, 'simulation');
     assert.equal(detail.ai.errorCode, 'AI_NOT_CONFIGURED');
@@ -48,7 +49,7 @@ test('demo controls require CSRF/trusted origin and reject invalid payloads with
     const id = (await f.get('/api/carpark')).session.id;
     assert.equal((await f.post('/api/demo/scenario', { name: 'A', ai: true }, { 'X-Voltguard-Csrf': '' })).status, 403);
     assert.equal((await f.post('/api/demo/reset', {}, { Origin: 'https://foreign.invalid' })).status, 403);
-    for (const body of [null, [], { name: 'C', ai: true }, { name: 'A' }, { name: 'A', ai: 'true' }, { name: 'B', ai: false, sourceType: 'device' }]) {
+    for (const body of [null, [], { name: 'Z', ai: true }, { name: 'A' }, { name: 'A', ai: 'true' }, { name: 'B', ai: false, sourceType: 'device' }]) {
       assert.equal((await f.post('/api/demo/scenario', body)).status, 422);
       assert.equal((await f.get('/api/carpark')).session.id, id);
     }
@@ -92,7 +93,52 @@ test('scenario startup clears baseline rate history, A stays warning and B cross
     assert.equal((await f.get('/api/alerts')).alerts.length, 1);
     assert.equal((await f.get('/api/alerts')).alerts[0].level, 'danger');
     assert.equal((await f.get('/api/bays/B2-02')).summary.peakC, 86);
+    response = await f.post('/api/demo/scenario', { name: 'C', ai: false }); assert.equal(response.status, 200);
+    detail = await f.get('/api/bays/B2-04');
+    assert.equal(detail.summary.status, 'warning'); assert.equal(detail.hotspot.zone, 'wheel');
+    assert.equal(detail.summary.isCharging, true); assert.ok(detail.frame.temperaturesC[19][9] > 60);
+    for (let t = 1; t <= 40; t++) {
+      f.tick(); assert.equal(f.app.carpark.detail('B2-04').summary.status, 'warning', `C second ${t}`);
+      await new Promise(setImmediate);
+    }
+    assert.ok(Math.abs(f.app.carpark.detail('B2-04').assessment.peakC - 67) < 1e-10);
   } finally { await f.app.close(); }
+});
+
+test('operator close-up and patrol extras become ready after eight simulation seconds without broadcasting matrices', async () => {
+  const f = await fixture();
+  let socket;
+  try {
+    socket = new WebSocket(f.base.replace('http', 'ws') + '/ws');
+    const inbox = [];
+    socket.addEventListener('message', event => inbox.push(JSON.parse(event.data)));
+    await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('WS_CONNECT_TIMEOUT')), 2000);
+      socket.addEventListener('message', () => { clearTimeout(timer); resolve(); }, { once: true });
+      socket.addEventListener('error', error => { clearTimeout(timer); reject(error); }, { once: true });
+    });
+    await f.post('/api/demo/scenario', { name: 'C', ai: false });
+    const alertId = (await f.get('/api/bays/B2-04')).alert.id;
+    const posted = await f.post(`/api/alerts/${alertId}/decisions`, { level: 'maintain', extras: ['request_closeup', 'dispatch_patrol'], operator: 'P1', viewedMs: 0, aiStance: 'none', aiRunId: null });
+    assert.equal(posted.status, 201);
+    const pending = await f.get('/api/bays/B2-04');
+    assert.equal(pending.followups.closeup.status, 'pending'); assert.equal(pending.followups.closeup.frame, null);
+    assert.equal(pending.followups.patrol.status, 'pending'); assert.equal(pending.followups.patrol.text_zh, null);
+    for (let t = 1; t < 8; t++) f.tick();
+    assert.equal(f.app.carpark.detail('B2-04').followups.closeup.status, 'pending');
+    f.tick();
+    const ready = await f.get('/api/bays/B2-04');
+    assert.equal(ready.followups.closeup.status, 'ready');
+    assert.equal(ready.followups.closeup.hotspot.zone, 'wheel');
+    assert.ok(ready.followups.closeup.frame.temperaturesC[19][9] < 50);
+    assert.equal(ready.followups.closeup.exportable, false);
+    assert.match(ready.followups.patrol.text_en, /hub is warm/);
+    await new Promise(resolve => setTimeout(resolve, 20));
+    const followups = inbox.filter(item => item.type === 'followup');
+    assert.ok(followups.length >= 2);
+    assert.ok(followups.every(item => item.report.sourceType === 'simulation' && item.report.exportable === false && item.report.status === 'ready'));
+    assert.equal(JSON.stringify(followups).includes('temperaturesC'), false);
+  } finally { socket?.close(); await f.app.close(); }
 });
 
 test('sessions and alerts persist in separate tables, reset cascades demo rows, and measured records/exports stay unchanged', async () => {

@@ -4,7 +4,7 @@ export const BAY_AI_RATIONALE_INSTRUCTION = 'No digits in either rationale, incl
 export const BAY_AI_SCHEMA = Object.freeze({ type: 'object', additionalProperties: false, required: ['cause', 'recommendation', 'rationale_zh', 'rationale_en', 'next_steps'], properties: {
   cause: { type: 'string', enum: ['battery_zone_anomaly', 'brake_residual_heat', 'recently_parked', 'engine_or_exhaust', 'sun_or_ambient', 'undetermined'] },
   recommendation: { type: 'string', enum: ['escalate', 'maintain', 'downgrade'] }, rationale_zh: { type: 'string', maxLength: 80 }, rationale_en: { type: 'string', maxLength: 300 },
-  next_steps: { type: 'array', minItems: 1, maxItems: 4, items: { type: 'string', enum: ['observe', 'dispatch_patrol', 'notify_manager', 'call_999'] } }
+  next_steps: { type: 'array', minItems: 1, maxItems: 4, items: { type: 'string', enum: ['observe', 'dispatch_patrol', 'notify_manager', 'call_999', 'request_closeup'] } }
 } });
 export const BAY_AI_DOWNGRADE_INSTRUCTION = 'Downgrade is permitted only when ALL five conditions hold: (1) the supplied alert level is warning, never danger; (2) the program hotspot region is not underbody; (3) you judge from the image that the hotspot is a small concentrated patch, not widespread heat; (4) the current peak is no higher than BOTH the peak from ten seconds ago and the peak from thirty seconds ago; (5) neither historical peak is missing: a missing sample means insufficient trend evidence and forbids downgrade. Otherwise recommend maintain or escalate. Always explain the charging context; a charging wheel hotspot may be downgraded if all five conditions hold.';
 export function validateBayAIOutput(output, level, evidence) {

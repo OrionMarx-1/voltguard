@@ -15,7 +15,7 @@ function recordAt(bayId, matrix, t) {
 const assess = (record, previous, t) => assessTelemetry(record, previous, { now: epoch + t * 1000 });
 
 test('synthetic frames have a fixed 24 by 32 shape, deterministic values, and independent output arrays', () => {
-  for (const kind of ['A', 'B', 'normal', 'empty']) {
+  for (const kind of ['A', 'B', 'C', 'normal', 'empty']) {
     for (const t of [0, 28, 42, 60, 100]) {
       const matrix = frameAt(kind, t);
       assert.equal(matrix.length, 24);
@@ -86,16 +86,16 @@ test('scenario B first connects, warns at second 28, reaches danger at second 42
 });
 
 test('the scenario-start contract drops baseline history so a frame jump cannot cause a false danger', () => {
-  for (const name of ['A', 'B']) {
+  for (const name of ['A', 'B', 'C']) {
     const bayId = SCENARIOS[name].bayId;
     const old = recordAt(bayId, bayFrameAt(bayId, 0), 0);
     const first = recordAt(bayId, bayFrameAt(bayId, 1, { scenario: name, scenarioTime: 0 }), 1);
     assert.equal(assess(first, old, 1).thermal, 'danger', `${name}: stale history reproduces the frame-jump error`);
     const reconnected = assess(first, null, 1);
-    assert.equal(reconnected.thermal, name === 'A' ? 'warning' : 'unknown');
+    assert.equal(reconnected.thermal, name === 'B' ? 'unknown' : 'warning');
     assert.equal(reconnected.riseCPerS, null);
     const second = recordAt(bayId, bayFrameAt(bayId, 2, { scenario: name, scenarioTime: 1 }), 2);
-    assert.equal(assess(second, first, 2).thermal, name === 'A' ? 'warning' : 'normal');
+    assert.equal(assess(second, first, 2).thermal, name === 'B' ? 'normal' : 'warning');
   }
 });
 
@@ -124,7 +124,7 @@ test('all baseline bays follow their occupancy/charging configuration and never 
 });
 
 test('scenario routing changes only its target bay, keeps the missing bay missing, and uses separate clocks', () => {
-  for (const scenario of ['A', 'B']) {
+  for (const scenario of ['A', 'B', 'C']) {
     for (const bay of DEMO_BAYS) {
       const matrix = bayFrameAt(bay.bayId, 105, { scenario, scenarioTime: 28 });
       const expected = !bay.emitsFrames ? null : bay.bayId === SCENARIOS[scenario].bayId ? frameAt(scenario, 28) : bayFrameAt(bay.bayId, 105);
@@ -132,6 +132,29 @@ test('scenario routing changes only its target bay, keeps the missing bay missin
     }
   }
   assert.throws(() => bayFrameAt('B2-13', 0), /BAY_ID/);
-  assert.throws(() => bayFrameAt('B2-02', 0, { scenario: 'C' }), /SIMULATION_SCENARIO/);
+  assert.throws(() => bayFrameAt('B2-02', 0, { scenario: 'D' }), /SIMULATION_SCENARIO/);
   assert.throws(() => bayFrameAt('B2-02', 0, { scenario: 'B', scenarioTime: -1 }), /SIMULATION_TIME/);
+});
+
+test('scenario C stays warning at the wheel-underbody junction and a close-up isolates the wheel', () => {
+  let previous = null;
+  for (let t = 0; t <= 45; t++) {
+    const record = recordAt('B2-04', frameAt('C', t), t);
+    const result = assess(record, previous, t), hotspot = hotspotRegion(record.temperaturesC);
+    assert.equal(result.thermal, 'warning', `C t=${t}`);
+    assert.equal(hotspot.zone, 'wheel');
+    assert.equal(hotspot.row, 19); assert.equal(hotspot.col, 8);
+    assert.ok(Math.abs(result.peakC - (65 + 0.05 * Math.min(t, 40))) < 1e-10);
+    assert.ok(record.temperaturesC[19][8] > record.temperaturesC[19][9]);
+    assert.ok(record.temperaturesC[19][9] > 60);
+    if (t === 0) assert.equal(result.riseCPerS, null);
+    else if (t <= 40) assert.ok(Math.abs(result.riseCPerS - 0.05) < 1e-10);
+    else assert.equal(result.riseCPerS, 0);
+    previous = record;
+  }
+  const closeup = frameAt('C', 8, { closeup: true }), closeHotspot = hotspotRegion(closeup);
+  assert.equal(closeHotspot.zone, 'wheel'); assert.equal(closeHotspot.row, 19); assert.equal(closeHotspot.col, 8);
+  assert.ok(closeup[19][9] < 50);
+  assert.deepEqual(frameAt('C', 40), frameAt('C', 80));
+  assert.throws(() => frameAt('C', 0, { closeup: 'yes' }), /SIMULATION_CLOSEUP/);
 });

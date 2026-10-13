@@ -94,6 +94,21 @@ try {
   await page.setViewportSize({ width: 1440, height: 1050 }); await overflow(); await capture('carpark-danger-handled-en.png');
   await page.locator('#cpReset').click(); await count(0); assert.equal(app.carpark.alerts().alerts.length, 0);
   assert.equal(await page.locator('#cpDecisionForm').isVisible(), false); assert.equal(await page.locator('#cpCall999').isVisible(), false);
+  step(); await page.locator('#cpScenarioC').click();
+  const originC = clock;
+  await bay('B2-04').click();
+  await page.locator('#cpDecisionForm').waitFor();
+  await submit('maintain', ['request_closeup', 'dispatch_patrol']); await count(1);
+  assert.match(await page.locator('#cpCloseupFollowup').innerText(), /Waiting for the thermal camera/);
+  assert.match(await page.locator('#cpPatrolFollowup').innerText(), /Waiting for a site report/);
+  assert.equal(await page.locator('#cpCloseupImage').isHidden(), true);
+  clock = originC + 8000; app.carpark.tick();
+  await page.locator('#cpCloseupImage:not([hidden])').waitFor();
+  assert.equal(await page.locator('#cpCloseupImage').getAttribute('data-region'), 'wheel');
+  assert.match(await page.locator('#cpCloseupNote').innerText(), /not a live CCTV/);
+  assert.match(await page.locator('#cpPatrolFollowup').innerText(), /hub is warm/);
+  await capture('carpark-closeup-en.png');
+  await page.locator('#cpReset').click(); await count(0);
   step(); await page.locator('#cpScenarioA').click(); await bay('B2-03').click();
   await context.setOffline(true); await page.locator('#cpConnection[data-connected="false"]').waitFor();
   assert.equal(await page.locator('#cpDecisionSubmit').isDisabled(), true);
@@ -116,5 +131,5 @@ try {
   assert.ok(writes.filter(item => /decisions$/.test(item.route)).every(item => item.input.aiStance === 'none' && item.input.aiRunId === null && !('frame' in item.input)));
   assert.equal((await (await fetch(base + '/api/events')).json()).events.length, 0);
   assert.equal((await (await fetch(base + '/api/fleet')).json()).records.length, 0); assert.deepEqual(errors, []);
-  console.log(JSON.stringify({ ok: true, manualDecisions: true, additionalActionsOnly: true, queueSections: true, observingStillWarning: true, appendedFrameSnapshots: true, failureRetainsChoices: true, serverRejectsRacingDowngrade: true, call999EscalatesWithoutDialling: true, operatorUnverifiedAndStorageOptional: true, resetClearsHistory: true, offlineDisabled: true, bilingual: true, mobileOverflow: false, aiCalls: 0, pageErrors: errors, output }, null, 2));
+  console.log(JSON.stringify({ ok: true, manualDecisions: true, additionalActionsOnly: true, queueSections: true, observingStillWarning: true, appendedFrameSnapshots: true, failureRetainsChoices: true, serverRejectsRacingDowngrade: true, call999EscalatesWithoutDialling: true, operatorUnverifiedAndStorageOptional: true, resetClearsHistory: true, offlineDisabled: true, simulatedCloseupAndPatrol: true, bilingual: true, mobileOverflow: false, aiCalls: 0, pageErrors: errors, output }, null, 2));
 } finally { await browser.close(); await app.close(); }

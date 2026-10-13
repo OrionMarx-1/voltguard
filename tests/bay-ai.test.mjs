@@ -56,6 +56,8 @@ test('independent validation rejects schema, unsafe instructions, numbers, inval
     { ...output(), next_steps: ['call_999'] }, { ...output(), cause: 'battery_zone_anomaly' }, { ...output(), cause: 'undetermined' }]) assert.throws(() => validateBayAIOutput(change, 'warning', eligibleEvidence()), BayAIError);
   assert.throws(() => validateBayAIOutput(output(), 'danger'), /AI_OUTPUT_DOWNGRADE/);
   assert.equal(validateBayAIOutput({ ...output(), cause: 'battery_zone_anomaly', recommendation: 'escalate', next_steps: ['call_999'] }, 'danger').recommendation, 'escalate');
+  assert.deepEqual(validateBayAIOutput({ ...output(), recommendation: 'maintain', next_steps: ['observe', 'request_closeup'] }, 'warning', eligibleEvidence()).next_steps, ['observe', 'request_closeup']);
+  assert.ok(BAY_AI_SCHEMA.properties.next_steps.items.enum.includes('request_closeup'));
 });
 
 test('downgrade requires warning, non-underbody and both non-rising historical peaks; it is never rewritten', () => {

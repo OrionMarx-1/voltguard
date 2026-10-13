@@ -28,7 +28,7 @@ try {
   assert.equal(initial.bays.filter(bay => bay.status === 'normal').length, 5);
   assert.deepEqual(initial.bays.filter(bay => bay.noData).map(bay => bay.id), ['B2-06']);
   const results = {};
-  for (const [name, bayId, seconds] of [['A', 'B2-03', [0, 1, 28, 42, 60]], ['B', 'B2-02', [0, 1, 27, 28, 41, 42, 46, 50]]]) {
+  for (const [name, bayId, seconds] of [['A', 'B2-03', [0, 1, 28, 42, 60]], ['B', 'B2-02', [0, 1, 27, 28, 41, 42, 46, 50]], ['C', 'B2-04', [0, 1, 8, 40]]]) {
     await post('/api/demo/scenario', { name, ai: false });
     const startedAt = clock, rows = [];
     for (const second of seconds) {
@@ -41,6 +41,9 @@ try {
   assert.equal(results.A[0].state, 'warning');
   assert.equal(results.B.find(row => row.second === 28).state, 'warning');
   assert.equal(results.B.find(row => row.second === 42).state, 'danger');
+  assert.equal(results.C[0].state, 'warning');
+  assert.equal(results.C.find(row => row.second === 40).state, 'warning');
+  assert.equal(results.C[0].zone, 'wheel');
   await post('/api/demo/reset', {});
   const alerts = await get('/api/alerts'); assert.equal(alerts.alerts.length, 0);
   assert.equal((await get('/api/events')).events.length, 0); assert.equal((await get('/api/fleet')).records.length, 0);

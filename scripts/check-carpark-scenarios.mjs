@@ -16,7 +16,7 @@ for (const scenario of Object.values(SCENARIOS)) {
       timestamp: new Date(now).toISOString(), temperaturesC: frameAt(scenario.name, t)
     });
     const result = assessTelemetry(record, previous, { now });
-    if (allSeconds || [0, 1, 27, 28, 30, 41, 42, 46, 50, 60].includes(t)) {
+    if (allSeconds || [0, 1, 8, 27, 28, 30, 40, 41, 42, 46, 50, 60].includes(t)) {
       rows.push({ second: t, peakC: Number(result.peakC.toFixed(1)), riseCPerS: result.riseCPerS === null ? null : Number(result.riseCPerS.toFixed(2)), rule: result.thermal, zone: hotspotRegion(record.temperaturesC).zone });
     }
     previous = record;

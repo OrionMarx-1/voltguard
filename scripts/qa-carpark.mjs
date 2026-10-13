@@ -197,6 +197,7 @@ try {
   assert.equal(await bay('B2-02').getAttribute('data-no-data'), 'true');
   assert.equal(await page.locator('.cp-bay[data-status="normal"]').count(), 0);
   assert.equal(await page.locator('#cpScenarioB').isDisabled(), true);
+  assert.equal(await page.locator('#cpScenarioC').isDisabled(), true);
   assert.equal(await page.locator('#cpFrameContent').isVisible(), true);
   assert.equal(await page.locator('#cpSelectedPanel').getAttribute('data-detail-stale'), 'true');
   assert.match(await page.locator('#cpDetailNotice').innerText(), /last image and rule/);
@@ -219,6 +220,14 @@ try {
   assert.equal(await bay('B2-02').getAttribute('data-status'), 'normal');
   assert.equal(await page.locator('.cp-alert-item').count(), 0);
 
+  await page.locator('#cpScenarioC').click(); await waitBay('B2-04', 'warning');
+  await bay('B2-04').click();
+  assert.equal(await page.locator('#cpScenarioC').getAttribute('aria-pressed'), 'true');
+  assert.match(await page.locator('#cpScenario').innerText(), /Junction heat/);
+  await checkHotspot('B2-04', 'wheel');
+  assert.ok(app.carpark.detail('B2-04').frame.temperaturesC[19][9] > 60);
+  await capture('carpark-junction-en.png');
+
   await page.evaluate(() => document.getElementById('thermalTab').click()); await page.locator('#thermalTemperature').filter({ hasNotText: '—' }).waitFor();
   assert.equal(await page.locator('#carparkView').isVisible(), false);
   assert.equal(await page.locator('#thermalView').getAttribute('data-mode'), 'nasa');
@@ -232,6 +241,7 @@ try {
   await publicPage.locator('#cpServiceNotice').waitFor();
   assert.match(await publicPage.locator('#cpServiceNotice').innerText(), /Run the local service/);
   assert.equal(await publicPage.locator('#cpScenarioA').isDisabled(), true);
+  assert.equal(await publicPage.locator('#cpScenarioC').isDisabled(), true);
   assert.equal(await publicPage.locator('.cp-bay[data-status="normal"]').count(), 0);
   assert.equal(await publicPage.locator('.cp-bay[data-status="no_data"]').count(), 6);
   assert.equal(await publicPage.locator('#cpFrameContent').isVisible(), false);
@@ -245,5 +255,5 @@ try {
   assert.equal((await (await fetch(base + '/api/events')).json()).events.length, 0);
   assert.equal((await (await fetch(base + '/api/fleet')).json()).records.length, 0);
   assert.deepEqual(errors, []);
-  console.log(JSON.stringify({ ok: true, sixChargingBaysInOneRow: true, deterministicAB: true, thermalPixelsAndHotspots: true, serverRuleAndRate: true, timestampedTrendGaps: true, detailFailureAndRetry: true, lateDetailIgnored: true, selectedBayOnly: true, reset: true, bilingual: true, keyboardAndFocus: true, disconnectRetainsDanger: true, staleSessionIgnored: true, failedWriteRetainsState: true, staticRequiresService: true, nasaPreserved: true, mobileOverflow: false, aiCalls: 0, pageErrors: errors, output }, null, 2));
+  console.log(JSON.stringify({ ok: true, sixChargingBaysInOneRow: true, deterministicAB: true, scenarioCJunction: true, thermalPixelsAndHotspots: true, serverRuleAndRate: true, timestampedTrendGaps: true, detailFailureAndRetry: true, lateDetailIgnored: true, selectedBayOnly: true, reset: true, bilingual: true, keyboardAndFocus: true, disconnectRetainsDanger: true, staleSessionIgnored: true, failedWriteRetainsState: true, staticRequiresService: true, nasaPreserved: true, mobileOverflow: false, aiCalls: 0, pageErrors: errors, output }, null, 2));
 } finally { await browser.close(); await app.close(); }

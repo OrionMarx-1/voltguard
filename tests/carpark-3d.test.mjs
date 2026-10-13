@@ -64,7 +64,7 @@ test('only one actual maximum is mapped; ties take the first row and column, mis
   frame[0][0] = 68; assert.equal(vehicleColors(frame, options).hotspot, null);
 });
 test('charging cable requires a visible occupied vehicle and the charging flag; rear wheels never use temperature colors', () => {
-  for (const scenario of ['A', 'B']) {
+  for (const scenario of ['A', 'B', 'C']) {
     const frame = frameAt(scenario, 42), charging = vehicleColors(frame, { ...options, isCharging: true });
     assert.equal(charging.chargingCable, true); assert.equal(charging.rearWheelColor, VEHICLE_TIRE_COLOR);
     assert.equal(vehicleColors(frame, options).chargingCable, false);

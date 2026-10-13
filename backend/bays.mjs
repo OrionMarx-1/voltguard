@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { CARPARK_LAYOUT, hotspotRegion } from '../dist/carpark/layout.mjs';
 import { normalizeTelemetry, assessTelemetry, ValidationError } from '../dist/safety.mjs';
-import { DEMO_BAYS, SCENARIOS } from './sim/scenarios.mjs';
+import { DEMO_BAYS, SCENARIOS, SCENARIO_NAMES } from './sim/scenarios.mjs';
 import { normalizeDecision, DecisionError } from './bay-decisions.mjs';
 import { POLICY } from '../dist/safety.mjs';
 
@@ -14,7 +14,7 @@ export function createBayMonitor({ now = Date.now, onAlert = () => {}, onDecisio
   let activeScenario = null;
   const states = new Map();
   function reset(id, { scenario = null } = {}) {
-    if (scenario !== null && !['A', 'B'].includes(scenario)) throw new ValidationError('SIMULATION_SCENARIO');
+    if (scenario !== null && !SCENARIO_NAMES.includes(scenario)) throw new ValidationError('SIMULATION_SCENARIO');
     sessionId = id;
     activeScenario = scenario;
     states.clear();

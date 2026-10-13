@@ -29,7 +29,7 @@ test('live plan retains all five exact base cases and appends two test-only coun
   assert.deepEqual(plan.map(sample => [sample.scenario, sample.second, Boolean(sample.testOnly)]), [
     ['A', 0, false], ['A', 30, false], ['A', 60, false], ['B', 28, false], ['B', 42, false], ['rising_wheel', 30, true], ['cooling_underbody', 30, true]]);
   assert.deepEqual(plan.slice(5).map(sample => sample.expected.recommendation), ['not_downgrade', 'not_downgrade']);
-  assert.deepEqual(Object.keys(SCENARIOS), ['A', 'B']);
+  assert.deepEqual(Object.keys(SCENARIOS), ['A', 'B', 'C']);
   for (const sample of plan.slice(5)) {
     const formal = prepareBayCheckInput(sample, 'formal');
     assert.equal(JSON.parse(formal.text).isChargingBay, true);

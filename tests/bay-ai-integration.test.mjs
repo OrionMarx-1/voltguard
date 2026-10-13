@@ -24,7 +24,7 @@ test('early frames do not duplicate lifecycle requests; accepted suggestions sto
   const f = fixture({ ...stub, complete: args => { calls++; return stub.complete(args); } });
   try {
     f.carpark.play({ name: 'A', ai: true }); await settle(f, 'B2-03');
-    const initial = f.carpark.detail('B2-03'); assert.equal(initial.ai.output.recommendation, 'maintain'); assert.equal(initial.ai.testStub, true); assert.equal(calls, 1);
+    const initial = f.carpark.detail('B2-03'); assert.equal(initial.ai.output.recommendation, 'maintain'); assert.deepEqual(initial.ai.output.next_steps, ['observe', 'request_closeup']); assert.equal(initial.ai.testStub, true); assert.equal(calls, 1);
     for (let t = 0; t < 5; t++) { f.tick(1); await flush(); }
     assert.equal(calls, 1); const alertId = initial.alert.id, aiRunId = initial.ai.id;
     f.carpark.decide(alertId, choice('maintain', 'confirmed', aiRunId));

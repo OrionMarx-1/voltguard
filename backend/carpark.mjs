@@ -5,6 +5,8 @@ import { createBayMonitor } from './bays.mjs';
 import { createSimulationPlayer } from './sim/player.mjs';
 import { createAIProvider } from './ai-provider.mjs';
 import { createBayAI, publicAIRun } from './bay-ai.mjs';
+import { createBayFollowups } from './bay-followups.mjs';
+import { SCENARIO_NAMES } from './sim/scenarios.mjs';
 
 export function createDemoCarpark({ db, broadcast, now = Date.now, autoStart = true, setIntervalFn, clearIntervalFn, provider = createAIProvider(), aiOptions = {} }) {
   db.exec(`
@@ -44,6 +46,7 @@ export function createDemoCarpark({ db, broadcast, now = Date.now, autoStart = t
   }, onChange(run) {
     broadcast('ai', { sessionId: run.sessionId, bayId: run.bayId, alertId: run.alertId, runId: run.id, status: run.status, errorCode: run.errorCode, sourceType: 'simulation', exportable: false, testStub: run.testStub });
   } });
+  const followups = createBayFollowups();
   const player = createSimulationPlayer({ now, setIntervalFn, clearIntervalFn,
     onFrame(frame) {
       monitor.ingestSimulation(frame);
@@ -52,7 +55,13 @@ export function createDemoCarpark({ db, broadcast, now = Date.now, autoStart = t
         ai.refresh(current.alert, current);
       }
     },
-    onTick: () => broadcast('bays', { session: { ...session }, bays: monitor.summaries(), sourceType: 'simulation', exportable: false })
+    onTick({ second, capturedAt }) {
+      const newly = followups.setSecond(second, { capturedAt });
+      for (const item of newly) {
+        broadcast('followup', { sessionId: session.id, bayId: item.bayId, kind: item.kind, status: 'ready', sourceType: 'simulation', exportable: false });
+      }
+      broadcast('bays', { session: { ...session }, bays: monitor.summaries(), sourceType: 'simulation', exportable: false });
+    }
   });
   function newSession(scenario = null, aiRequested = true) {
     const next = { id: randomUUID(), startedAt: new Date(now()).toISOString(), scenario, aiRequested, aiEnabled: aiRequested && provider.configured, aiConfigured: provider.configured,
@@ -65,6 +74,7 @@ export function createDemoCarpark({ db, broadcast, now = Date.now, autoStart = t
     } catch (error) { db.exec('ROLLBACK'); throw error; }
     session = next;
     ai.reset(session.id, session.aiEnabled);
+    followups.reset(session.id, scenario);
     // Includes the target bay's frame/rate history: its first frame has no slope.
     monitor.reset(session.id, { scenario });
     player.reset(scenario);
@@ -80,12 +90,13 @@ export function createDemoCarpark({ db, broadcast, now = Date.now, autoStart = t
       ...current, session: { ...session }, sourceType: 'simulation', exportable: false,
       decisions: db.prepare('SELECT record FROM bay_decisions WHERE session_id=? AND bay_id=? ORDER BY rowid').all(session.id, id).map(row => { const decision = JSON.parse(row.record); return { ...decision, aiRun: decision.aiRunId ? lookup(decision.aiRunId) : null }; }),
       aiRuns: db.prepare('SELECT record FROM bay_ai_runs WHERE session_id=? AND bay_id=? ORDER BY rowid').all(session.id, id).map(row => publicAIRun(JSON.parse(row.record))),
+      followups: followups.forBay(id),
       ai: !session.aiRequested ? { status: 'unavailable', errorCode: 'AI_DISABLED', testStub: provider.kind === 'test_stub' } : ai.latest(current.alert?.id)
     };
   }
   function play(input) {
     if (!input || typeof input !== 'object' || Array.isArray(input) || Object.keys(input).some(key => !['name', 'ai'].includes(key))) throw new ValidationError('DEMO_CONTROL');
-    if (!['A', 'B'].includes(input.name)) throw new ValidationError('SIMULATION_SCENARIO');
+    if (!SCENARIO_NAMES.includes(input.name)) throw new ValidationError('SIMULATION_SCENARIO');
     if (typeof input.ai !== 'boolean') throw new ValidationError('DEMO_AI_SWITCH');
     return newSession(input.name, input.ai);
   }
@@ -95,6 +106,7 @@ export function createDemoCarpark({ db, broadcast, now = Date.now, autoStart = t
     snapshot, detail, play,
     decide(id, input) {
       const result = monitor.decide(id, input);
+      followups.requestFromDecision(result.decision);
       if (result.decision.levelBefore === 'warning' && result.alert.level === 'danger') ai.trigger(result.alert, monitor.detail(result.alert.bayId));
       broadcast('decision', { sessionId: session.id, bayId: result.decision.bayId, alertId: id, decisionId: result.decision.id, sourceType: 'simulation', exportable: false });
       broadcast('alert', { event: 'decision', alert: result.alert });

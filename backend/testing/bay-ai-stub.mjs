@@ -15,7 +15,7 @@ export function createBayAIStub({ mode = 'success', delayMs = 350 } = {}) {
       [evidence.peakC, evidence.peak10SecondsAgoC, evidence.peak30SecondsAgoC].every(Number.isFinite) &&
       evidence.peakC <= evidence.peak10SecondsAgoC && evidence.peakC <= evidence.peak30SecondsAgoC;
     const output = wheel ? { cause: 'brake_residual_heat', recommendation: eligible ? 'downgrade' : 'maintain',
-      rationale_zh: '測試替身的預設說明：熱點集中在車輪位置，供操作流程驗證。', rationale_en: 'Preset test-stub explanation: the hotspot is concentrated near the wheel, for workflow testing.', next_steps: ['observe'] } :
+      rationale_zh: '測試替身的預設說明：熱點集中在車輪位置，供操作流程驗證。', rationale_en: 'Preset test-stub explanation: the hotspot is concentrated near the wheel, for workflow testing.', next_steps: eligible ? ['observe'] : ['observe', 'request_closeup'] } :
       { cause: 'battery_zone_anomaly', recommendation: 'escalate', rationale_zh: '測試替身的預設說明：車底熱點持續升溫，供操作流程驗證。', rationale_en: 'Preset test-stub explanation: the underbody hotspot is rising, for workflow testing.', next_steps: ['dispatch_patrol', 'notify_manager'] };
     if (mode === 'invalid') output.rationale_en = 'Guaranteed safe 99';
     if (mode === 'always_downgrade') { output.cause = 'brake_residual_heat'; output.recommendation = 'downgrade'; output.next_steps = ['observe']; }

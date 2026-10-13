@@ -1,4 +1,4 @@
-import { DEMO_BAYS, SCENARIOS, bayFrameAt } from './scenarios.mjs';
+import { DEMO_BAYS, SCENARIO_NAMES, bayFrameAt } from './scenarios.mjs';
 import { ValidationError } from '../../dist/safety.mjs';
 
 export function createSimulationPlayer({ now = Date.now, onFrame, onTick = () => {}, setIntervalFn = setInterval, clearIntervalFn = clearInterval } = {}) {
@@ -20,11 +20,11 @@ export function createSimulationPlayer({ now = Date.now, onFrame, onTick = () =>
       onFrame({ schemaVersion: 'voltguard-frame-1', bayId: bay.bayId, seq: sequence, capturedAt, temperaturesC: matrix });
     }
     lastSecond = second;
-    onTick({ second, scenario, seq: sequence });
+    onTick({ second, scenario, seq: sequence, capturedAt });
     return true;
   }
   function reset(name = null) {
-    if (name !== null && !['A', 'B'].includes(name)) throw new ValidationError('SIMULATION_SCENARIO');
+    if (name !== null && !SCENARIO_NAMES.includes(name)) throw new ValidationError('SIMULATION_SCENARIO');
     scenario = name;
     playbackStartedAt = now();
     lastSecond = -1;

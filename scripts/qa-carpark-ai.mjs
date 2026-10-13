@@ -44,6 +44,7 @@ try {
   await page.locator('#cpAiFrame[data-earlier="true"]').waitFor();
   assert.match(await page.locator('#cpAiFrame').innerText(), /Explanation uses an earlier frame/);
   await page.locator('#cpAiConfirm').click(); assert.equal(await page.locator('#cpLevelmaintain').isChecked(), true);
+  assert.equal(await page.locator('#cpExtra_request_closeup').isChecked(), true);
   assert.equal(app.carpark.detail('B2-03').decisions.length, 0);
   await page.locator('#cpDecisionSubmit').click(); await count(1);
   const saved = app.carpark.detail('B2-03').decisions[0];

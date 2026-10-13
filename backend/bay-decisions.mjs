@@ -9,7 +9,7 @@ export function normalizeDecision(input, alert, ai = null) {
   if (!operator || [...operator].length > 20 || /\p{Cc}/u.test(operator)) reject('OPERATOR');
   if (!Number.isSafeInteger(input.viewedMs) || input.viewedMs < 0) reject('VIEWED_MS');
   if (![null, 'downgrade', 'maintain', 'escalate'].includes(input.level)) reject('DECISION_LEVEL');
-  if (!Array.isArray(input.extras) || input.extras.some(action => !['dispatch_patrol', 'notify_manager', 'call_999'].includes(action)) || new Set(input.extras).size !== input.extras.length) reject('DECISION_EXTRAS');
+  if (!Array.isArray(input.extras) || input.extras.some(action => !['dispatch_patrol', 'notify_manager', 'call_999', 'request_closeup'].includes(action)) || new Set(input.extras).size !== input.extras.length) reject('DECISION_EXTRAS');
   if (!['none', 'confirmed', 'rejected'].includes(input.aiStance)) reject('AI_UNAVAILABLE');
   const available = ai?.status === 'available' && ai.ok === true && ai.levelAtRequest === alert.level;
   if (input.aiStance === 'none' && input.aiRunId !== null) reject('AI_UNAVAILABLE');

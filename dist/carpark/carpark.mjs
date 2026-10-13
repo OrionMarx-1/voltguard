@@ -27,8 +27,9 @@ const words = {
     evidence: '車位畫面 · 仿真',
     noFrame: '尚無可用溫度幀', missingNote: '未收到新資料；不能據此判定正常。', summaryNote: '此頁顯示規則狀態與最高溫。',
     controls: '演示控制', controlsNote: '選擇場景會清空上一場演示告警。',
-    sceneA: '場景 A', sceneADesc: '前輪餘熱', sceneB: '場景 B', sceneBDesc: '車底升溫', reset: '重置演示',
-    ai: 'AI 說明', aiNote: 'AI 未配置，規則告警照常運行。', baseline: '正常背景', runningA: '場景 A · 前輪餘熱', runningB: '場景 B · 車底升溫',
+    sceneA: '場景 A', sceneADesc: '前輪餘熱', sceneB: '場景 B', sceneBDesc: '車底升溫', sceneC: '場景 C', sceneCDesc: '交界熱 · 特寫', reset: '重置演示',
+    ai: 'AI 說明', aiNote: 'AI 未配置，規則告警照常運行。', baseline: '正常背景', runningA: '場景 A · 前輪餘熱', runningB: '場景 B · 車底升溫', runningC: '場景 C · 交界熱',
+    closeup: '特寫熱成像 · 仿真', closeupPending: '已向該車位熱像發出特寫請求（仿真），等待對準。',
     policy: '原型閾值', policyNote: '警告 ≥ 60°C 或 1°C/s · 危險 ≥ 80°C 或 2°C/s。尚未按車型校準。',
     actionFailed: '操作未完成，請重新連線後再試。', csrfError: '服務已重啟，請重新連線後再試。',
     floorLabel: 'B2 車位配置', summaryLabel: '車位規則狀態摘要', context: 'B2 停車場 · 仿真演示 · 非實測',
@@ -58,8 +59,9 @@ const words = {
     evidence: 'Bay view · Simulation',
     noFrame: 'No temperature frame available', missingNote: 'No new data. A normal result cannot be established.', summaryNote: 'This view shows rule status and peak temperature.',
     controls: 'Demo controls', controlsNote: 'Starting a scenario clears the previous demo alerts.',
-    sceneA: 'Scenario A', sceneADesc: 'Wheel residual heat', sceneB: 'Scenario B', sceneBDesc: 'Underbody heating', reset: 'Reset demo',
-    ai: 'AI explanation', aiNote: 'AI is not configured. Rule alerts remain active.', baseline: 'Baseline', runningA: 'Scenario A · Wheel residual heat', runningB: 'Scenario B · Underbody heating',
+    sceneA: 'Scenario A', sceneADesc: 'Wheel residual heat', sceneB: 'Scenario B', sceneBDesc: 'Underbody heating', sceneC: 'Scenario C', sceneCDesc: 'Junction heat · close-up', reset: 'Reset demo',
+    ai: 'AI explanation', aiNote: 'AI is not configured. Rule alerts remain active.', baseline: 'Baseline', runningA: 'Scenario A · Wheel residual heat', runningB: 'Scenario B · Underbody heating', runningC: 'Scenario C · Junction heat',
+    closeup: 'Close-up thermal · Simulation', closeupPending: 'Close-up requested from this bay’s thermal camera (simulation). Waiting for it to aim.',
     policy: 'Prototype thresholds', policyNote: 'Warning ≥ 60°C or 1°C/s · Danger ≥ 80°C or 2°C/s. Not vehicle-calibrated.',
     actionFailed: 'The action did not complete. Reconnect and try again.', csrfError: 'The service restarted. Reconnect and try again.',
     floorLabel: 'B2 bay configuration', summaryLabel: 'Bay rule-status summary', context: 'B2 carpark · Simulation demo · Not measured',
@@ -91,7 +93,7 @@ view.innerHTML = `
         <div class="cp-floor"><div class="cp-row-label" data-cp="chargingRow"></div><div id="cpBayGrid" class="cp-bay-grid"></div></div>
         <div class="cp-map-foot"><span data-cp="selectHint"></span><span>32 × 24 · 1 Hz</span></div>
       </section>
-      <section class="cp-controls" aria-labelledby="cpControlsTitle"><div class="cp-controls-heading"><div><h2 id="cpControlsTitle" data-cp="controls"></h2><p data-cp="controlsNote"></p></div><span id="cpScenario" class="cp-scenario-label"></span></div><div class="cp-control-actions"><button id="cpScenarioA" class="cp-scenario-button" type="button" aria-pressed="false"><span class="cp-scenario-letter">A</span><span><strong data-cp="sceneA"></strong><small data-cp="sceneADesc"></small></span></button><button id="cpScenarioB" class="cp-scenario-button" type="button" aria-pressed="false"><span class="cp-scenario-letter">B</span><span><strong data-cp="sceneB"></strong><small data-cp="sceneBDesc"></small></span></button><button id="cpReset" class="cp-button cp-reset" type="button"><span aria-hidden="true">↺</span><span data-cp="reset"></span></button></div><div class="cp-ai-control"><label><input id="cpAiToggle" type="checkbox" disabled><span data-cp="ai"></span></label><span data-cp="aiNote"></span></div></section>
+      <section class="cp-controls" aria-labelledby="cpControlsTitle"><div class="cp-controls-heading"><div><h2 id="cpControlsTitle" data-cp="controls"></h2><p data-cp="controlsNote"></p></div><span id="cpScenario" class="cp-scenario-label"></span></div><div class="cp-control-actions"><button id="cpScenarioA" class="cp-scenario-button" type="button" aria-pressed="false"><span class="cp-scenario-letter">A</span><span><strong data-cp="sceneA"></strong><small data-cp="sceneADesc"></small></span></button><button id="cpScenarioB" class="cp-scenario-button" type="button" aria-pressed="false"><span class="cp-scenario-letter">B</span><span><strong data-cp="sceneB"></strong><small data-cp="sceneBDesc"></small></span></button><button id="cpScenarioC" class="cp-scenario-button" type="button" aria-pressed="false"><span class="cp-scenario-letter">C</span><span><strong data-cp="sceneC"></strong><small data-cp="sceneCDesc"></small></span></button><button id="cpReset" class="cp-button cp-reset" type="button"><span aria-hidden="true">↺</span><span data-cp="reset"></span></button></div><div class="cp-ai-control"><label><input id="cpAiToggle" type="checkbox" disabled><span data-cp="ai"></span></label><span data-cp="aiNote"></span></div></section>
     </div>
     <section id="cpEvidencePanel" class="cp-evidence-panel" aria-labelledby="cpEvidenceTitle"><h2 id="cpEvidenceTitle" class="cp-evidence-title" data-cp="evidence"></h2></section>
     <aside class="cp-sidebar">
@@ -112,6 +114,12 @@ details.innerHTML = `<div id="cpDetailNotice" class="cp-detail-notice" role="sta
     <div class="cp-palette" aria-hidden="true"></div><div class="cp-palette-ticks" aria-hidden="true"><span>20°C</span><span>40°C</span><span>60°C</span><span>80°C</span></div>
     <p class="cp-detail-small" data-cp="palette"></p><p class="cp-detail-small" data-cp="missingPixel"></p>
     <p class="cp-detail-small cp-camera-note" data-cp="camera"></p>
+    <div id="cpCloseupFrame" hidden>
+      <h3 data-cp="closeup"></h3>
+      <p id="cpCloseupStatus" class="cp-detail-small"></p>
+      <canvas id="cpCloseupImage" width="256" height="192" role="img" hidden></canvas>
+      <p id="cpCloseupNote" class="cp-detail-small" hidden></p>
+    </div>
     </div><section id="cpVehicle3D" class="cp-vehicle-3d" hidden aria-labelledby="cpVehicleTitle"><h3 id="cpVehicleTitle" data-cp="vehicle3d"></h3><p class="cp-vehicle-limit" data-cp="vehicleLimit"></p><div id="cpVehicleHost" class="cp-vehicle-host"></div><div id="cpVehicleLegend" class="cp-vehicle-legend"></div><p class="cp-detail-small" data-cp="vehicleColors"></p></section></div>
     <p id="cpVehicleFallback" class="cp-detail-small" data-cp="vehicleFallback" hidden></p>
     <div id="cpZoneLegend" class="cp-zone-legend"></div><p id="cpHotspot" class="cp-hotspot"></p>
@@ -217,8 +225,9 @@ function renderDetail(bay, config) {
   const notice = failed ? c().detailFailed : frame && (!connected || (bay.noData && !bay.connecting) || (detail.summary.noData && !detail.summary.connecting)) ? c().detailMissing : behind ? c().detailBehind : loading && !frame ? c().detailLoading : '';
   $('cpDetailNotice').hidden = !notice; setText($('cpDetailNotice'), notice);
   $('cpDetailRetry').hidden = !failed; $('cpDetailRetry').disabled = !connected || loading;
-  if (!frame) { detailSignature = ''; $('cpThermalImage').dataset.frameSeq = ''; return; }
-  const signature = JSON.stringify([detail.session.id, selected, frame.seq, bridge.language]);
+  if (!frame) { detailSignature = ''; $('cpThermalImage').dataset.frameSeq = ''; $('cpCloseupFrame').hidden = true; return; }
+  const closeup = detail.followups?.closeup ?? null;
+  const signature = JSON.stringify([detail.session.id, selected, frame.seq, bridge.language, closeup?.status, closeup?.readySecond]);
   if (signature === detailSignature) return;
   detailSignature = signature;
   drawBayFrame($('cpThermalImage'), frame.temperaturesC, detail.hotspot);
@@ -249,6 +258,18 @@ function renderDetail(bay, config) {
   for (const point of geometry.points) add('circle', { cx: point.x, cy: point.y, r: 2, class: 'cp-trend-point' });
   add('text', { x: 12, y: 104, class: 'cp-trend-label' }, c().lastMinute);
   add('text', { x: 288, y: 104, 'text-anchor': 'end', class: 'cp-trend-label' }, c().now);
+  $('cpCloseupFrame').hidden = !closeup;
+  $('cpCloseupStatus').hidden = closeup?.status !== 'pending';
+  setText($('cpCloseupStatus'), closeup?.status === 'pending' ? c().closeupPending : '');
+  const closeupReady = closeup?.status === 'ready' && closeup.frame;
+  $('cpCloseupImage').hidden = !closeupReady;
+  $('cpCloseupNote').hidden = !closeupReady;
+  if (closeupReady) {
+    drawBayFrame($('cpCloseupImage'), closeup.frame.temperaturesC, closeup.hotspot);
+    $('cpCloseupImage').dataset.region = closeup.hotspot?.zone ?? '';
+    $('cpCloseupImage').setAttribute('aria-label', `${selected}, ${c().closeup}`);
+    setText($('cpCloseupNote'), closeup.note?.[bridge.language] ?? '');
+  }
 }
 function renderAlerts() {
   const shown = displayAlerts(alerts, snapshot?.bays ?? [], connected);
@@ -373,11 +394,12 @@ function render() {
   const detail = detailLoader.state.detail;
   const matches = detail?.bay.id === selected && detail?.session.id === snapshot?.session.id;
   decisionPanel.render({ sessionId: snapshot?.session.id ?? '', bayId: selected, config, alert: alerts.find(item => item.id === bay.alertId) ?? null,
-    decisions: matches ? detail.decisions : [], ai: matches ? detail.ai : null, aiRuns: matches ? detail.aiRuns : [], currentFrameSeq: bay.frameSeq, connected, busy, detailReady: Boolean(matches && detail.frame && !detailLoader.state.loading && !detailLoader.state.error) });
-  for (const id of ['cpScenarioA', 'cpScenarioB', 'cpReset']) $(id).disabled = busy || !connected;
+    decisions: matches ? detail.decisions : [], ai: matches ? detail.ai : null, aiRuns: matches ? detail.aiRuns : [], followups: matches ? detail.followups : null, currentFrameSeq: bay.frameSeq, connected, busy, detailReady: Boolean(matches && detail.frame && !detailLoader.state.loading && !detailLoader.state.error) });
+  for (const id of ['cpScenarioA', 'cpScenarioB', 'cpScenarioC', 'cpReset']) $(id).disabled = busy || !connected;
   $('cpScenarioA').setAttribute('aria-pressed', String(snapshot?.session.scenario === 'A'));
   $('cpScenarioB').setAttribute('aria-pressed', String(snapshot?.session.scenario === 'B'));
-  setText($('cpScenario'), c()[snapshot?.session.scenario === 'A' ? 'runningA' : snapshot?.session.scenario === 'B' ? 'runningB' : 'baseline']);
+  $('cpScenarioC').setAttribute('aria-pressed', String(snapshot?.session.scenario === 'C'));
+  setText($('cpScenario'), c()[snapshot?.session.scenario === 'A' ? 'runningA' : snapshot?.session.scenario === 'B' ? 'runningB' : snapshot?.session.scenario === 'C' ? 'runningC' : 'baseline']);
   $('cpControlsTitle').parentElement.parentElement.setAttribute('aria-busy', String(busy));
   $('contextValue').textContent = c().context;
   const verified = document.querySelector('.verified'); verified.textContent = c().simulation; verified.classList.add('is-simulation');
@@ -451,7 +473,7 @@ function connect() {
     } else if (message.type === 'alert') {
       refreshAlerts();
       if (message.report?.alert?.sessionId === snapshot?.session.id && message.report.alert.bayId === selected) { detailRevision++; syncDetail(); }
-    } else if (['decision', 'ai'].includes(message.type) && message.report?.sessionId === snapshot?.session.id && message.report.bayId === selected) { detailRevision++; syncDetail(); }
+    } else if (['decision', 'ai', 'followup'].includes(message.type) && message.report?.sessionId === snapshot?.session.id && message.report.bayId === selected) { detailRevision++; syncDetail(); }
   });
   channel.addEventListener('error', () => channel.close());
   channel.addEventListener('close', () => {
@@ -469,7 +491,7 @@ async function control(name = null) {
   } catch (failure) { error = failure.message; }
   finally { busy = false; render(); }
 }
-$('cpScenarioA').addEventListener('click', () => control('A')); $('cpScenarioB').addEventListener('click', () => control('B')); $('cpReset').addEventListener('click', () => control());
+$('cpScenarioA').addEventListener('click', () => control('A')); $('cpScenarioB').addEventListener('click', () => control('B')); $('cpScenarioC').addEventListener('click', () => control('C')); $('cpReset').addEventListener('click', () => control());
 $('cpReconnect').addEventListener('click', load);
 $('cpDetailRetry').addEventListener('click', () => detailLoader.retry());
 const freshnessTimer = setInterval(() => {

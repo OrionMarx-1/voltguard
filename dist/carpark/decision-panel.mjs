@@ -7,7 +7,8 @@ const words = {
   zh: { operator: '值班員名稱或代號', unverified: '未驗證身份 · 1–20 字', placeholder: '例如 P1', title: '保安決定',
     unavailable: 'AI 說明不可用 · 直接選擇級別', pending: '待處理', processing: '處理中', downgraded: '已降級 · 觀察中',
     downgrade: '降級 · 觀察', maintain: '維持', escalate: '升級為危險', extrasOnly: '只記錄附加動作', level: '選擇級別', extras: '附加動作',
-    dispatch_patrol: '派人查看', notify_manager: '通知經理', call_999: '撥打 999', submit: '記錄決定', saving: '正在記錄…',
+    dispatch_patrol: '派人查看', notify_manager: '通知經理', call_999: '撥打 999', request_closeup: '調取特寫熱成像', submit: '記錄決定', saving: '正在記錄…',
+    patrolPending: '已派人查看（仿真），等待現場回報。', closeupPending: '已發出特寫請求（仿真），等待熱像對準。',
     noAlert: '此車位沒有未結束告警。', dangerLock: '危險級別不得降級；可維持、升級或記錄附加動作。',
     recordOnly: '只記錄你的選擇；系統不會自動通知或撥號。', emergency: '危險告警：請依現場應變計劃安排處置。',
     callLink: '手動撥打 999', history: '本次演示決定記錄', noHistory: '尚無決定記錄。', simulation: '仿真 · 不可匯出',
@@ -19,7 +20,8 @@ const words = {
   en: { operator: 'Operator name or code', unverified: 'Identity unverified · 1–20 characters', placeholder: 'For example, P1', title: 'Operator decision',
     unavailable: 'AI explanation unavailable · Choose a level directly', pending: 'Pending', processing: 'In progress', downgraded: 'Downgraded · Observing',
     downgrade: 'Downgrade · Observe', maintain: 'Maintain', escalate: 'Escalate to danger', extrasOnly: 'Additional actions only', level: 'Choose a level', extras: 'Additional actions',
-    dispatch_patrol: 'Dispatch patrol', notify_manager: 'Notify manager', call_999: 'Call 999', submit: 'Record decision', saving: 'Recording…',
+    dispatch_patrol: 'Dispatch patrol', notify_manager: 'Notify manager', call_999: 'Call 999', request_closeup: 'Request close-up thermal', submit: 'Record decision', saving: 'Recording…',
+    patrolPending: 'Patrol dispatched (simulation). Waiting for a site report.', closeupPending: 'Close-up requested (simulation). Waiting for the thermal camera to aim.',
     noAlert: 'This bay has no active alert.', dangerLock: 'Danger cannot be downgraded. Maintain, escalate or record additional actions.',
     recordOnly: 'Records your choices only. No automatic notifications or calls.', emergency: 'Danger alert: arrange a response under the site emergency plan.',
     callLink: 'Manually call 999', history: 'Decisions in this demo session', noHistory: 'No decisions recorded.', simulation: 'Simulation · Not exportable',
@@ -42,7 +44,8 @@ export function createDecisionPanel({ host, operatorHost, language, request, onS
   host.innerHTML = `<div id="cpAiPanel" class="cp-ai-panel"></div><div class="cp-decision-heading"><h3 id="cpDecisionTitle"></h3><span id="cpDecisionStatus"></span></div>
     <p id="cpNoActiveAlert" class="cp-detail-small"></p><form id="cpDecisionForm"><fieldset id="cpLevelChoices"><legend id="cpLevelLegend"></legend>
     ${['downgrade', 'maintain', 'escalate', ''].map(value => `<label><input type="radio" name="cpDecisionLevel" value="${value}" id="cpLevel${value || 'extras'}"><span data-dp="${value || 'extrasOnly'}"></span></label>`).join('')}</fieldset>
-    <p id="cpDangerLock" class="cp-detail-small" hidden></p><fieldset><legend id="cpExtrasLegend"></legend>${['dispatch_patrol', 'notify_manager', 'call_999'].map(action => `<label><input type="checkbox" id="cpExtra_${action}" value="${action}"><span data-dp="${action}"></span></label>`).join('')}</fieldset>
+    <p id="cpDangerLock" class="cp-detail-small" hidden></p><fieldset><legend id="cpExtrasLegend"></legend>${['request_closeup', 'dispatch_patrol', 'notify_manager', 'call_999'].map(action => `<label><input type="checkbox" id="cpExtra_${action}" value="${action}"><span data-dp="${action}"></span></label>`).join('')}</fieldset>
+    <p id="cpCloseupFollowup" class="cp-detail-small" hidden></p><p id="cpPatrolFollowup" class="cp-detail-small" hidden></p>
     <p id="cpRecordOnly" class="cp-detail-small"></p><button id="cpDecisionSubmit" class="cp-button" type="submit"></button></form>
     <p id="cpDecisionFeedback" role="status" hidden></p><p id="cpDangerGuidance" class="cp-detail-small" hidden></p><a id="cpCall999" href="tel:999" hidden></a>
     <div class="cp-history-heading"><h3 id="cpDecisionHistoryTitle"></h3><span id="cpDecisionCount">0</span></div><p id="cpHistoryLabel" class="cp-detail-small"></p><div id="cpDecisionHistory"></div>`;
@@ -83,6 +86,13 @@ export function createDecisionPanel({ host, operatorHost, language, request, onS
     $('cpLeveldowngrade').disabled = !enabled || alert?.level === 'danger';
     if (alert?.level === 'danger') $('cpLeveldowngrade').checked = false;
     $('cpDecisionSubmit').textContent = busy ? c().saving : c().submit;
+    const closeup = next.followups?.closeup, patrol = next.followups?.patrol;
+    $('cpCloseupFollowup').hidden = !closeup;
+    $('cpCloseupFollowup').dataset.status = closeup?.status ?? '';
+    $('cpCloseupFollowup').textContent = closeup?.status === 'ready' ? (closeup.note?.[language()] ?? '') : closeup ? c().closeupPending : '';
+    $('cpPatrolFollowup').hidden = !patrol;
+    $('cpPatrolFollowup').dataset.status = patrol?.status ?? '';
+    $('cpPatrolFollowup').textContent = patrol?.status === 'ready' ? (patrol[language() === 'zh' ? 'text_zh' : 'text_en'] ?? '') : patrol ? c().patrolPending : '';
     $('cpDecisionFeedback').hidden = !feedback; $('cpDecisionFeedback').textContent = c()[feedback] ?? c().failed;
     $('cpDecisionFeedback').dataset.result = feedback === 'saved' ? 'saved' : 'error';
     const records = next.decisions ?? [];
