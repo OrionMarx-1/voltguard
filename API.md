@@ -2,7 +2,7 @@
 
 Default origin: `http://127.0.0.1:4173`. Loopback only, no CORS sharing. The static public Site does not expose these APIs.
 
-The default browser route is the carpark monitor. NASA measurement tools live under the secondary **Rule validation (NASA cells)** entry. Their existing API contracts are retained below; carpark simulation uses separate routes and tables.
+The default browser route is the carpark monitor. NASA measurement tools remain on `/?view=fleet`, `/?view=detail`, `/?view=thermal` and `/?view=operations`; they are not a homepage tab. Their existing API contracts are retained below; carpark simulation uses separate routes and tables.
 
 ## Carpark simulation API
 

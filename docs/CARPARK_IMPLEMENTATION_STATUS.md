@@ -262,3 +262,7 @@ $node = 'C:\Users\Admin1\AppData\Local\Programs\nodejs-v24.13.0\node.exe'
 - 已检查 `.sites-runtime/qa-navigation-v18/` 的桌面和手机截图。NASA 助手 QA 生成的截图复制到该忽略目录，测试改写的旧比赛素材还原，不混入本轮提交。
 
 技术文档列出的八轮实现现已交付。模型质量、车辆实测与阈值校准仍是已记录的验证边界：第 7 轮的超时、A 未建议降级及图像对照成因未达预期，不因完成导航而变为达标；NASA 电芯数据也不是停车场整车验证。
+
+## 首页导航：隐藏 NASA 标签
+
+首页只保留车位监控，不再显示「規則驗證（NASA 電芯）」主标签。NASA 页面仍在，评委用 `/?view=fleet|detail|thermal|operations` 打开；NASA 页顶部提供「返回車位監控」和原四项子导航。Service Worker 更新为 v27。

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { initialView, navigationState, NASA_VIEWS } from '../dist/navigation.mjs';
+import { initialView, navigationState, chromeState, NASA_VIEWS } from '../dist/navigation.mjs';
 
 test('home and unknown routes open carpark; all existing NASA deep links retain their view', () => {
   for (const search of ['', '?lang=en', '?view=unknown', '?view=']) assert.equal(initialView(search), 'carpark');
@@ -14,4 +14,9 @@ test('NASA subviews belong to rule validation and the most recent subview surviv
     state = navigationState('carpark', state.lastNASAView); assert.deepEqual(state, { section: 'carpark', lastNASAView: view });
   }
   assert.deepEqual(navigationState('unknown', 'unknown'), { section: 'carpark', lastNASAView: 'fleet' });
+});
+
+test('homepage chrome hides NASA; deep-linked NASA pages keep a back control and NASA subnav', () => {
+  assert.deepEqual(chromeState('carpark'), { primaryHidden: true, rulesHidden: true, nasaHidden: true });
+  assert.deepEqual(chromeState('rules'), { primaryHidden: false, rulesHidden: true, nasaHidden: false });
 });

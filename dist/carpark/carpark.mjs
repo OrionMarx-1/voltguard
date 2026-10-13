@@ -326,7 +326,6 @@ function updateReminders() {
   reminderAudio.tick(current, { globalMuted, mutedUntil, now: at });
 }
 function render() {
-  tab.textContent = c().tab;
   if (view.hidden) return;
   view.querySelectorAll('[data-cp]').forEach(element => setText(element, c()[element.dataset.cp]));
   $('cpAiToggle').disabled = !connected || busy || !snapshot?.session.aiConfigured;

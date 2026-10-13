@@ -1,5 +1,5 @@
 .primary-tabs{display:flex;gap:4px;width:max-content;max-width:100%;margin-bottom:20px;padding:4px;border:1px solid var(--rule);border-radius:10px;background:#eaf0ef}
 .primary-tabs .view-tab{padding:8px 17px;white-space:normal;text-align:center}
 #nasaNav{margin-bottom:22px}
-.carpark-active .primary-tabs{margin-bottom:26px}
-@media(max-width:760px){.primary-tabs{width:100%;display:grid;grid-template-columns:minmax(0,.8fr) minmax(0,1.4fr)}.primary-tabs .view-tab{min-width:0;padding:9px 10px;line-height:1.4}#nasaNav{width:100%;grid-template-columns:repeat(4,minmax(0,1fr))}}
+.carpark-active .primary-tabs{display:none}
+@media(max-width:760px){.primary-tabs{width:max-content}.primary-tabs .view-tab{min-width:0;padding:9px 10px;line-height:1.4}#nasaNav{width:100%;grid-template-columns:repeat(4,minmax(0,1fr))}}

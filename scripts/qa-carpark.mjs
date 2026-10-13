@@ -219,7 +219,7 @@ try {
   assert.equal(await bay('B2-02').getAttribute('data-status'), 'normal');
   assert.equal(await page.locator('.cp-alert-item').count(), 0);
 
-  await page.locator('#rulesTab').click(); await page.locator('#thermalTab').click(); await page.locator('#thermalTemperature').filter({ hasNotText: '—' }).waitFor();
+  await page.evaluate(() => document.getElementById('thermalTab').click()); await page.locator('#thermalTemperature').filter({ hasNotText: '—' }).waitFor();
   assert.equal(await page.locator('#carparkView').isVisible(), false);
   assert.equal(await page.locator('#thermalView').getAttribute('data-mode'), 'nasa');
   assert.equal(await page.locator('.verified').evaluate(element => element.classList.contains('is-simulation')), false);
@@ -237,7 +237,7 @@ try {
   assert.equal(await publicPage.locator('#cpFrameContent').isVisible(), false);
   await overflow(publicPage);
   await capture('carpark-static-en-mobile.png', publicPage);
-  await publicPage.locator('#rulesTab').click(); await publicPage.locator('#thermalTab').click(); await publicPage.locator('#thermalTemperature').filter({ hasNotText: '—' }).waitFor();
+  await publicPage.evaluate(() => document.getElementById('thermalTab').click()); await publicPage.locator('#thermalTemperature').filter({ hasNotText: '—' }).waitFor();
   assert.equal(await publicPage.locator('#thermalView').getAttribute('data-mode'), 'nasa'); await publicContext.close();
 
   assert.ok(writes.length >= 4); assert.ok(writes.every(item => ['/api/demo/scenario', '/api/demo/reset'].includes(item.route)));
