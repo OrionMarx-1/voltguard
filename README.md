@@ -1,5 +1,7 @@
 # VoltGuard · carpark thermal-alert prototype
 
+This directory is the runnable product. Start `serve.mjs` and open http://127.0.0.1:4173.
+
 VoltGuard is a carpark control-room prototype: thermal frames drive deterministic alerts, AI offers advisory explanations, and an operator records a decision. The default screen is **Bay monitor / 車位監控**. **Rule validation (NASA cells) / 規則驗證（NASA 電芯）** retains the measured-cell tools as a separate secondary workspace. The carpark demo uses labeled synthetic frames; no real vehicle or thermal camera is connected. This is not a certified safety controller or fire-prediction product.
 
 ## Run the full local system

@@ -1,5 +1,6 @@
 .sites-runtime/
 .git.incomplete-*/
+.openai/
 .chart-data-*/
 .env
 .env.*
