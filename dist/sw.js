@@ -1,4 +1,4 @@
-const CACHE_NAME = 'voltguard-demo-v24';
+const CACHE_NAME = 'voltguard-demo-v25';
 const CORE_ASSETS = [
   './',
   './navigation.mjs',
@@ -81,13 +81,13 @@ self.addEventListener('fetch', event => {
 
   if (url.pathname.includes('/data/') || url.pathname.includes('/carpark/') || url.pathname.includes('/vendor/three/') || /\/(navigation\.(css|mjs)|operations\.(css|mjs)|(?:safety|evidence|guidance|field-mode|ux-accessibility)\.mjs|copilot(?:-panel)?\.(css|mjs)|thermal(?:-map|-3d|-ux|-simulation)?\.(css|mjs))$/.test(url.pathname)) {
     event.respondWith(
-      caches.match(request, { ignoreSearch: true }).then(cached => cached || fetch(request).then(response => {
+      fetch(request).then(response => {
         if (response.ok) {
           const copy = response.clone();
           caches.open(CACHE_NAME).then(cache => cache.put(request, copy));
         }
         return response;
-      })),
+      }).catch(() => caches.match(request, { ignoreSearch: true })),
     );
   }
 });
