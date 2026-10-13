@@ -24,6 +24,7 @@ const words = {
     latest: '最高溫', lastReading: '最後讀值', blindSpots: '無資料車位', alerts: '目前告警', alertsNote: '已處理告警仍保留，待持續正常後結束；重置可清空。',
     noAlerts: '目前沒有規則告警', noAlertsNote: '系統持續監測；無資料不代表正常。', pending: '待處理', recovered: '溫度已恢復正常',
     selected: '車位詳情', selectHint: '點選車位，或用方向鍵移動。', chargingBay: '充電車位', standardBay: '普通車位',
+    evidence: '車位畫面 · 仿真',
     noFrame: '尚無可用溫度幀', missingNote: '未收到新資料；不能據此判定正常。', summaryNote: '此頁顯示規則狀態與最高溫。',
     controls: '演示控制', controlsNote: '選擇場景會清空上一場演示告警。',
     sceneA: '場景 A', sceneADesc: '前輪餘熱', sceneB: '場景 B', sceneBDesc: '車底升溫', reset: '重置演示',
@@ -54,6 +55,7 @@ const words = {
     latest: 'Peak temperature', lastReading: 'Last reading', blindSpots: 'Bays without data', alerts: 'Current alerts', alertsNote: 'Handled alerts remain until sustained normal evidence closes them or the demo is reset.',
     noAlerts: 'No current rule alerts', noAlertsNote: 'Monitoring continues. Missing data is not a normal result.', pending: 'Pending', recovered: 'Temperature returned to normal',
     selected: 'Bay details', selectHint: 'Select a bay, or move with the arrow keys.', chargingBay: 'Charging bay', standardBay: 'Standard bay',
+    evidence: 'Bay view · Simulation',
     noFrame: 'No temperature frame available', missingNote: 'No new data. A normal result cannot be established.', summaryNote: 'This view shows rule status and peak temperature.',
     controls: 'Demo controls', controlsNote: 'Starting a scenario clears the previous demo alerts.',
     sceneA: 'Scenario A', sceneADesc: 'Wheel residual heat', sceneB: 'Scenario B', sceneBDesc: 'Underbody heating', reset: 'Reset demo',
@@ -91,6 +93,7 @@ view.innerHTML = `
       </section>
       <section class="cp-controls" aria-labelledby="cpControlsTitle"><div class="cp-controls-heading"><div><h2 id="cpControlsTitle" data-cp="controls"></h2><p data-cp="controlsNote"></p></div><span id="cpScenario" class="cp-scenario-label"></span></div><div class="cp-control-actions"><button id="cpScenarioA" class="cp-scenario-button" type="button" aria-pressed="false"><span class="cp-scenario-letter">A</span><span><strong data-cp="sceneA"></strong><small data-cp="sceneADesc"></small></span></button><button id="cpScenarioB" class="cp-scenario-button" type="button" aria-pressed="false"><span class="cp-scenario-letter">B</span><span><strong data-cp="sceneB"></strong><small data-cp="sceneBDesc"></small></span></button><button id="cpReset" class="cp-button cp-reset" type="button"><span aria-hidden="true">↺</span><span data-cp="reset"></span></button></div><div class="cp-ai-control"><label><input id="cpAiToggle" type="checkbox" disabled><span data-cp="ai"></span></label><span data-cp="aiNote"></span></div></section>
     </div>
+    <section id="cpEvidencePanel" class="cp-evidence-panel" aria-labelledby="cpEvidenceTitle"><h2 id="cpEvidenceTitle" class="cp-evidence-title" data-cp="evidence"></h2></section>
     <aside class="cp-sidebar">
       <section class="cp-alert-panel" aria-labelledby="cpAlertsTitle"><div class="cp-sidebar-heading"><h2 id="cpAlertsTitle" data-cp="alerts"></h2><span id="cpAlertCount" class="cp-counter">0</span></div><p id="cpNoDataBays" class="cp-no-data"></p><div id="cpAlertList" aria-live="polite" aria-atomic="true"></div><p class="cp-panel-note" data-cp="alertsNote"></p></section>
       <section id="cpSelectedPanel" class="cp-selected-panel" aria-labelledby="cpSelectedTitle"><div class="cp-sidebar-heading"><h2 id="cpSelectedTitle" data-cp="selected"></h2><span class="cp-selection-dot" aria-hidden="true"></span></div><div class="cp-selected-heading"><strong id="cpSelectedId"></strong><span id="cpSelectedType"></span></div><span id="cpSelectedStatus" class="cp-status-tag"></span><div class="cp-selected-temp"><span id="cpSelectedPeak">—</span><small>°C</small></div><p id="cpSelectedCaption"></p><p id="cpSelectedOccupancy"></p><p id="cpSelectedNote" class="cp-panel-note"></p></section>
@@ -120,7 +123,7 @@ details.innerHTML = `<div id="cpDetailNotice" class="cp-detail-notice" role="sta
   </div>`;
 const decisionHost = document.createElement('div'); decisionHost.className = 'cp-decision-panel';
 $('cpSelectedOccupancy').after(decisionHost);
-decisionHost.after(details);
+$('cpEvidencePanel').append(details);
 // Keep the existing missing-frame 2D state while allowing an empty bay schematic.
 const vehiclePosition = document.createElement('div'); vehiclePosition.className = 'cp-flat-frame';
 $('cpVehicle3D').before(vehiclePosition); vehiclePosition.append($('cpVehicle3D'));
@@ -208,6 +211,7 @@ function renderDetail(bay, config) {
   const stale = Boolean(frame && (!connected || bay.noData || detail.summary.noData || behind || failed));
   $('cpFrameContent').hidden = !frame; $('cpDetailEmpty').hidden = Boolean(frame);
   $('cpSelectedPanel').dataset.detailStale = String(stale);
+  $('cpEvidencePanel').dataset.detailStale = String(stale);
   $('cpSelectedPanel').dataset.detailBay = matches ? selected : '';
   $('cpSelectedPanel').dataset.detailSession = matches ? detail.session.id : '';
   const notice = failed ? c().detailFailed : frame && (!connected || (bay.noData && !bay.connecting) || (detail.summary.noData && !detail.summary.connecting)) ? c().detailMissing : behind ? c().detailBehind : loading && !frame ? c().detailLoading : '';

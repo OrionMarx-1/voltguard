@@ -70,6 +70,17 @@ try {
   await page.locator('#cpVehicle3D:not([hidden]) .cp-vehicle-canvas').waitFor();
   assert.match(await page.locator('#cpVehicle3D').innerText(), /Schematic, not a real vehicle model/);
   assert.equal(await page.locator('#cpThermalImage').isVisible(), true);
+  await page.evaluate(() => scrollTo(0, 0));
+  const firstScreen = await page.evaluate(() => {
+    const visible = id => { const box = document.getElementById(id).getBoundingClientRect(); return box.top < innerHeight && box.bottom > 0; };
+    return {
+      floor: visible('cpBayGrid'), thermal: visible('cpThermalImage'), vehicle: visible('cpVehicle3D'),
+      evidenceLeft: document.getElementById('cpEvidencePanel').getBoundingClientRect().left,
+      floorRight: document.getElementById('cpBayGrid').getBoundingClientRect().right
+    };
+  });
+  assert.equal(firstScreen.floor, true); assert.equal(firstScreen.thermal, true); assert.equal(firstScreen.vehicle, true);
+  assert.ok(firstScreen.evidenceLeft >= firstScreen.floorRight - 1);
   assert.equal(await page.locator('#cpThermalImage').evaluate(canvas => [canvas.width, canvas.height].join('×')), '256×192');
   assert.ok(detailReads.every(route => route === '/api/bays/B2-02'));
   await capture('carpark-baseline-en.png');

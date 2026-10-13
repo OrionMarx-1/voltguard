@@ -100,7 +100,11 @@ try {
   mode = 'success'; await page.locator('#cpScenarioB').click(); tick(28); await bay('B2-02').click(); await available();
   assert.match(await page.locator('#cpAiRecommendation').innerText(), /Escalate to danger.*Underbody anomaly/);
   assert.equal(app.carpark.detail('B2-02').alert.level, 'warning');
-  assert.ok(await page.evaluate(() => document.querySelector('#cpAiPanel').getBoundingClientRect().top < document.querySelector('#cpThermalImage').getBoundingClientRect().top));
+  await page.evaluate(() => scrollTo(0, 0));
+  assert.ok(await page.evaluate(() => {
+    const visible = id => { const box = document.getElementById(id).getBoundingClientRect(); return box.top < innerHeight && box.bottom > 0; };
+    return visible('cpThermalImage') && visible('cpVehicle3D');
+  }));
   assert.match(await page.locator('[data-dp="escalate"]').innerText(), /Escalate to danger/);
   await page.locator('#cpAiConfirm').click(); assert.equal(await page.locator('#cpLevelescalate').isChecked(), true);
   assert.equal(await page.locator('#cpExtra_dispatch_patrol').isChecked(), true); assert.equal(await page.locator('#cpExtra_notify_manager').isChecked(), true);
