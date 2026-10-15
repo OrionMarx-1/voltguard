@@ -34,3 +34,13 @@ test('NASA-era pitch assets are retained and explicitly marked historical', () =
   assert.match(doc, /3 October/);
   assert.match(doc, /Do not use these files as the 18 October 2026/);
 });
+
+test('published judge instructions share the verified public repository and clone URL', () => {
+  const web = 'https://github.com/OrionMarx-1/voltguard';
+  for (const file of ['README.md', 'docs/submission/JUDGE_RUN.md']) {
+    const doc = read(file);
+    assert.ok(doc.includes(`](${web})`), file);
+    assert.ok(doc.includes(`${web}.git`), file);
+  }
+  assert.ok(read('docs/submission/JUDGE_RUN.md').replace(/\r\n/g, '\n').includes(`git clone ${web}.git\ncd voltguard\nnode --version\nnode serve.mjs`));
+});

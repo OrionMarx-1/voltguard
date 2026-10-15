@@ -4,6 +4,8 @@ VoltGuard is an EV charging-bay thermal warning prototype: deterministic rules f
 
 **Hack4SDGs 2026 · Green Transport & Smart Mobility · HKBU Team 1023 / LadyBanana · 18 October 2026 submission.**
 
+**Public repository / submission form URL:** [https://github.com/OrionMarx-1/voltguard](https://github.com/OrionMarx-1/voltguard). HTTPS clone URL: `https://github.com/OrionMarx-1/voltguard.git`.
+
 ## Run locally
 
 Requires **Node.js 24+** with `node:sqlite`. The application has no npm dependencies and needs **no npm install**.

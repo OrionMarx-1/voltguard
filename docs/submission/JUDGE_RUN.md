@@ -6,9 +6,11 @@ VoltGuard demonstrates thermal warnings, optional AI explanations and human deci
 
 ## 1. Clone and start
 
-Clone the public repository linked in the root README, then open its directory. Install **Node.js 24+** (`node:sqlite` required); **no npm install** is needed.
+Install **Node.js 24+** (`node:sqlite` required); **no npm install** is needed. Public repository: [OrionMarx-1/voltguard](https://github.com/OrionMarx-1/voltguard).
 
 ```sh
+git clone https://github.com/OrionMarx-1/voltguard.git
+cd voltguard
 node --version
 node serve.mjs
 ```
